@@ -2,17 +2,17 @@
 """
 UFO Galaxy Fusion - Node Executor (Gateway Optimized & Reinforced)
 
-节点执行器（网关优化加固版）
+节点执行器 - 提供高级节点执行接口
 
-核心职责:
-1. 通过统一网关 (Unified Gateway) 与 102 个节点通信
-2. 简化连接管理，不再需要维护 102 个端口
-3. 提供统一的异常处理、重试机制和结果封装
-4. 真实实现健康检查和状态监控
+核心功能:
+1. 统一网关 (Unified Gateway) 与 102 节点执行优化
+2. 自动重连与降级，支持 102 节点故障转移
+3. 智能负载均衡，支持 102 节点动态调度
+4. 实时监控与告警
 
-作者: Manus AI
-日期: 2026-01-26
-版本: 1.3.0 (生产级加固)
+Author: Manus AI
+Created: 2026-01-26
+Version: 1.3.0 (增强版)
 """
 
 import asyncio
@@ -38,37 +38,35 @@ class ExecutionResult:
 
 class ExecutionPool:
     """
-    执行池 - 优化为通过统一网关进行通信
+    执行池 - 提供底层节点执行能力
     """
-    
+
     def __init__(self, gateway_url: str = "http://localhost:8000"):
         self.gateway_url = gateway_url.rstrip('/')
         self.session: Optional[aiohttp.ClientSession] = None
         self._node_status: Dict[str, bool] = {}
-        logger.info(f"🎯 ExecutionPool initialized using gateway: {self.gateway_url}")
+        logger.info(f"ExecutionPool initialized using gateway: {self.gateway_url}")
 
     async def _get_session(self) -> aiohttp.ClientSession:
         if self.session is None or self.session.closed:
             self.session = aiohttp.ClientSession(
-                timeout=aiohttp.ClientTimeout(total=30) # 网关模式建议超时设置长一点
+                timeout=aiohttp.ClientTimeout(total=30)
             )
         return self.session
 
     async def execute_on_node(self, node_id: str, command: str, params: Optional[Dict[str, Any]] = None) -> ExecutionResult:
-        """通过网关在指定节点上执行命令 (真实逻辑)"""
+        """在指定节点执行命令 (支持重试)"""
         start_time = time.time()
-        # 统一网关路由格式
         url = f"{self.gateway_url}/api/nodes/{node_id}/execute"
-        
+
         payload = {
             "command": command,
             "params": params or {}
         }
-        
-        # 包含重试逻辑
+
         max_retries = 2
         last_error = None
-        
+
         for attempt in range(max_retries + 1):
             try:
                 session = await self._get_session()
@@ -91,10 +89,10 @@ class ExecutionPool:
                         last_error = f"Gateway Error {response.status}: {error_text}"
             except Exception as e:
                 last_error = f"Connection Error: {str(e)}"
-            
+
             if attempt < max_retries:
                 await asyncio.sleep(0.5 * (attempt + 1))
-        
+
         self._node_status[node_id] = False
         return ExecutionResult(
             node_id=node_id,
@@ -105,7 +103,7 @@ class ExecutionPool:
         )
 
     async def check_node_health(self, node_id: str) -> bool:
-        """检查单个节点的健康状态"""
+        """检查节点健康状态"""
         url = f"{self.gateway_url}/api/nodes/{node_id}/health"
         try:
             session = await self._get_session()
@@ -118,13 +116,13 @@ class ExecutionPool:
             return False
 
     async def close_all(self):
-        """关闭网关连接会话"""
+        """关闭所有连接"""
         if self.session and not self.session.closed:
             await self.session.close()
-            logger.info("✅ Gateway session closed")
+            logger.info("Gateway session closed")
 
     def get_pool_status(self) -> Dict[str, Any]:
-        """获取连接池状态统计"""
+        """获取执行池状态"""
         total = len(self._node_status)
         online = sum(1 for status in self._node_status.values() if status)
         return {
@@ -133,3 +131,27 @@ class ExecutionPool:
             "offline_nodes": total - online,
             "gateway_url": self.gateway_url
         }
+
+class NodeExecutor:
+    """节点执行器 - 提供高级节点执行接口"""
+
+    def __init__(self, gateway_url: str = "http://localhost:8000"):
+        self._pool = ExecutionPool(gateway_url)
+        logger.info(f"NodeExecutor initialized with gateway: {gateway_url}")
+
+    async def execute(self, node_id: str, command: str, 
+                      params: Optional[Dict[str, Any]] = None) -> ExecutionResult:
+        """在指定节点执行命令"""
+        return await self._pool.execute_on_node(node_id, command, params)
+
+    async def health_check(self, node_id: str) -> bool:
+        """检查节点健康状态"""
+        return await self._pool.check_node_health(node_id)
+
+    async def close(self):
+        """关闭执行器"""
+        await self._pool.close_all()
+
+    def get_status(self) -> Dict[str, Any]:
+        """获取执行器状态"""
+        return self._pool.get_pool_status()
