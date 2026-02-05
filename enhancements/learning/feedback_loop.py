@@ -44,6 +44,29 @@ class FeedbackEntry:
     confidence: float = 0.0
     timestamp: datetime = field(default_factory=datetime.now)
     metadata: Dict[str, Any] = field(default_factory=dict)
+
+
+@dataclass
+class FeedbackRecord:
+    """Represents a feedback record for autonomous learning."""
+    record_id: str
+    action: str
+    outcome: str
+    success: bool
+    reward: float = 0.0
+    timestamp: datetime = field(default_factory=datetime.now)
+    context: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'record_id': self.record_id,
+            'action': self.action,
+            'outcome': self.outcome,
+            'success': self.success,
+            'reward': self.reward,
+            'timestamp': self.timestamp.isoformat(),
+            'context': self.context
+        }
     
     def to_dict(self) -> Dict[str, Any]:
         return {
@@ -56,6 +79,21 @@ class FeedbackEntry:
             'timestamp': self.timestamp.isoformat(),
             'metadata': self.metadata
         }
+    
+    @classmethod
+    def from_record(cls, record: 'FeedbackRecord') -> 'FeedbackEntry':
+        """Create FeedbackEntry from FeedbackRecord."""
+        feedback_type = FeedbackType.POSITIVE if record.success else FeedbackType.NEGATIVE
+        return cls(
+            feedback_id=record.record_id,
+            feedback_type=feedback_type,
+            source='autonomous_learning',
+            target='system',
+            content=f"{record.action} -> {record.outcome}",
+            confidence=abs(record.reward),
+            timestamp=record.timestamp,
+            metadata=record.context
+        )
 
 
 class FeedbackLoop:
@@ -116,3 +154,121 @@ class FeedbackLoop:
     def clear_history(self) -> None:
         """Clear feedback history."""
         self._feedback_history.clear()
+
+
+@dataclass
+class PerformanceMetric:
+    """Represents a performance metric."""
+    metric_name: str
+    value: float
+    unit: str = ""
+    timestamp: datetime = field(default_factory=datetime.now)
+    context: Dict[str, Any] = field(default_factory=dict)
+    
+    def to_dict(self) -> Dict[str, Any]:
+        return {
+            'metric_name': self.metric_name,
+            'value': self.value,
+            'unit': self.unit,
+            'timestamp': self.timestamp.isoformat(),
+            'context': self.context
+        }
+
+
+class MetricsTracker:
+    """Tracks performance metrics over time."""
+    
+    def __init__(self, max_history: int = 10000):
+        self.max_history = max_history
+        self._metrics: Dict[str, List[PerformanceMetric]] = {}
+        logger.info("MetricsTracker initialized")
+    
+    def record_metric(self, metric: PerformanceMetric) -> None:
+        """Record a performance metric."""
+        if metric.metric_name not in self._metrics:
+            self._metrics[metric.metric_name] = []
+        
+        self._metrics[metric.metric_name].append(metric)
+        
+        # Trim history
+        if len(self._metrics[metric.metric_name]) > self.max_history:
+            self._metrics[metric.metric_name] = self._metrics[metric.metric_name][-self.max_history:]
+    
+    def get_metrics(self, metric_name: str, limit: int = 100) -> List[PerformanceMetric]:
+        """Get recent metrics by name."""
+        return self._metrics.get(metric_name, [])[-limit:]
+    
+    def get_average(self, metric_name: str, window: int = 100) -> Optional[float]:
+        """Get average value of a metric over a window."""
+        metrics = self.get_metrics(metric_name, window)
+        if not metrics:
+            return None
+        return sum(m.value for m in metrics) / len(metrics)
+    
+    def clear_metrics(self, metric_name: Optional[str] = None) -> None:
+        """Clear metrics history."""
+        if metric_name:
+            self._metrics.pop(metric_name, None)
+        else:
+            self._metrics.clear()
+
+
+class ReinforcementLearner:
+    """Implements reinforcement learning for system improvement."""
+    
+    def __init__(self, learning_rate: float = 0.1, discount_factor: float = 0.9):
+        self.learning_rate = learning_rate
+        self.discount_factor = discount_factor
+        self._q_table: Dict[str, Dict[str, float]] = {}
+        self._state_visits: Dict[str, int] = {}
+        logger.info("ReinforcementLearner initialized")
+    
+    def get_q_value(self, state: str, action: str) -> float:
+        """Get Q-value for state-action pair."""
+        return self._q_table.get(state, {}).get(action, 0.0)
+    
+    def update_q_value(
+        self,
+        state: str,
+        action: str,
+        reward: float,
+        next_state: str
+    ) -> None:
+        """Update Q-value using Q-learning algorithm."""
+        if state not in self._q_table:
+            self._q_table[state] = {}
+        
+        current_q = self.get_q_value(state, action)
+        
+        # Get max Q-value for next state
+        next_q_values = self._q_table.get(next_state, {}).values()
+        max_next_q = max(next_q_values) if next_q_values else 0.0
+        
+        # Q-learning update
+        new_q = current_q + self.learning_rate * (
+            reward + self.discount_factor * max_next_q - current_q
+        )
+        
+        self._q_table[state][action] = new_q
+        self._state_visits[state] = self._state_visits.get(state, 0) + 1
+    
+    def choose_action(
+        self,
+        state: str,
+        available_actions: List[str],
+        epsilon: float = 0.1
+    ) -> str:
+        """Choose action using epsilon-greedy policy."""
+        import random
+        
+        if random.random() < epsilon:
+            # Explore: random action
+            return random.choice(available_actions)
+        else:
+            # Exploit: best action
+            q_values = {a: self.get_q_value(state, a) for a in available_actions}
+            return max(q_values, key=q_values.get)
+    
+    def get_policy(self, state: str) -> Dict[str, float]:
+        """Get policy (Q-values) for a state."""
+        return self._q_table.get(state, {}).copy()
