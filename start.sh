@@ -53,6 +53,20 @@ fi
 PYTHON_VERSION=$(python3 --version 2>&1 | cut -d' ' -f2)
 print_status "info" "检测到 Python $PYTHON_VERSION"
 
+# 检查 Tailscale
+if command -v tailscale &> /dev/null; then
+    TS_STATUS=$(tailscale status --json 2>/dev/null || echo "error")
+    if [[ "$TS_STATUS" == "error" ]]; then
+        print_status "warning" "Tailscale 已安装但未运行。建议运行 'sudo tailscale up' 以启用远程访问。"
+    else
+        TS_IP=$(tailscale ip -4 2>/dev/null)
+        print_status "success" "Tailscale 已就绪 (IP: $TS_IP)"
+    fi
+else
+    print_status "warning" "未检测到 Tailscale。建议安装以支持远程访问 (如 Android 手机连接)。"
+    print_status "info" "安装命令: curl -fsSL https://tailscale.com/install.sh | sh"
+fi
+
 # 检查是否首次运行
 if [ ! -f ".env" ]; then
     echo ""

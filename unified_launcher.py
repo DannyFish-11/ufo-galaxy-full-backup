@@ -186,6 +186,26 @@ class SystemConfig:
         
         return config
     
+    def _get_tailscale_ip(self) -> Optional[str]:
+        """获取 Tailscale IPv4 地址"""
+        try:
+            import shutil
+            tailscale_bin = shutil.which("tailscale")
+            if not tailscale_bin:
+                return None
+            
+            result = subprocess.run(
+                [tailscale_bin, "ip", "-4"], 
+                capture_output=True, 
+                text=True, 
+                timeout=1
+            )
+            if result.returncode == 0:
+                return result.stdout.strip()
+        except Exception:
+            pass
+        return None
+
     def has_llm_api(self) -> bool:
         """检查是否有可用的 LLM API"""
         return any([
@@ -213,6 +233,9 @@ class SystemConfig:
                 "web_ui": self.enable_web_ui,
                 "device_api": self.enable_device_api,
                 "l4_enabled": self.enable_l4,
+            },
+            "network": {
+                "tailscale_ip": self._get_tailscale_ip()
             }
         }
 
@@ -942,34 +965,50 @@ class UFOGalaxyUnified:
         llm_count = sum(1 for v in status["llm_apis"].values() if v)
         print_status(f"已配置 {llm_count} 个 LLM API", "info")
         
-        # 2. 启动核心服务
-        print_section("核心服务")
+        # 2. 并行启动服务
+        print_section("服务启动")
         self.service_manager.state = SystemState.STARTING_CORE
         
-        core_results = await self.core_launcher.start_all()
-        core_success = sum(1 for v in core_results.values() if v)
-        print_status(f"核心服务: {core_success}/{len(core_results)} 已启动", 
-                    "success" if core_success == len(core_results) else "warning")
+        # 定义启动任务
+        tasks = []
         
-        # 3. 启动节点系统
+        # 核心服务任务
+        async def start_core():
+            print_status("正在启动核心服务...", "loading")
+            results = await self.core_launcher.start_all()
+            success = sum(1 for v in results.values() if v)
+            print_status(f"核心服务: {success}/{len(results)} 已启动", 
+                        "success" if success == len(results) else "warning")
+            return results
+
+        tasks.append(start_core())
+
+        # 节点系统任务
         if self.config.enable_nodes:
-            print_section("节点系统")
-            self.service_manager.state = SystemState.STARTING_NODES
-            
-            node_results = await self.node_launcher.start_all(minimal=self.config.minimal_mode)
-            node_success = sum(1 for v in node_results.values() if v)
-            print_status(f"节点: {node_success}/{len(node_results)} 已启动", 
-                        "success" if node_success > 0 else "warning")
-        
-        # 4. 启动 L4 增强模块
+            async def start_nodes():
+                print_status("正在启动节点系统...", "loading")
+                self.service_manager.state = SystemState.STARTING_NODES
+                results = await self.node_launcher.start_all(minimal=self.config.minimal_mode)
+                success = sum(1 for v in results.values() if v)
+                print_status(f"节点: {success}/{len(results)} 已启动", 
+                            "success" if success > 0 else "warning")
+                return results
+            tasks.append(start_nodes())
+
+        # L4 模块任务
         if self.config.enable_l4:
-            print_section("L4 增强模块")
-            self.service_manager.state = SystemState.STARTING_L4
-            
-            l4_results = await self.l4_launcher.start_all()
-            l4_success = sum(1 for v in l4_results.values() if v)
-            print_status(f"L4 模块: {l4_success}/{len(l4_results)} 已初始化", 
-                        "success" if l4_success == len(l4_results) else "warning")
+            async def start_l4():
+                print_status("正在初始化 L4 模块...", "loading")
+                self.service_manager.state = SystemState.STARTING_L4
+                results = await self.l4_launcher.start_all()
+                success = sum(1 for v in results.values() if v)
+                print_status(f"L4 模块: {success}/{len(results)} 已初始化", 
+                            "success" if success == len(results) else "warning")
+                return results
+            tasks.append(start_l4())
+
+        # 并行执行所有启动任务
+        await asyncio.gather(*tasks)
         
         # 5. 启动 Web UI
         if self.config.enable_web_ui:
