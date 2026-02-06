@@ -106,7 +106,14 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_08_Fetch"
+      "description": "高级HTTP客户端节点，支持异步请求、重试机制、速率限制和缓存",
+      "capabilities": [
+        "http_get",
+        "http_post",
+        "async_requests",
+        "rate_limiting",
+        "caching"
+      ]
     },
     "Node_09_Sandbox": {
       "port": 8009,
@@ -126,7 +133,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_10_Slack"
+      "description": "Slack集成节点，支持消息发送、频道管理和事件监听",
+      "capabilities": [
+        "send_message",
+        "channel_management",
+        "event_listening",
+        "file_upload"
+      ]
     },
     "Node_11_GitHub": {
       "port": 8011,
@@ -136,7 +149,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_11_GitHub"
+      "description": "GitHub API集成节点，支持仓库管理、Issue处理和PR操作",
+      "capabilities": [
+        "repo_management",
+        "issue_tracking",
+        "pr_operations",
+        "webhook_handling"
+      ]
     },
     "Node_12_Postgres": {
       "port": 8012,
@@ -176,7 +195,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_15_OCR"
+      "description": "光学字符识别节点，支持多语言OCR、PDF文本提取和图像预处理",
+      "capabilities": [
+        "text_extraction",
+        "pdf_ocr",
+        "multi_language",
+        "image_preprocessing"
+      ]
     },
     "Node_16_Email": {
       "port": 8016,
@@ -196,7 +221,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_17_EdgeTTS"
+      "description": "Edge TTS语音合成节点，支持多语言、多音色和SSML",
+      "capabilities": [
+        "text_to_speech",
+        "multi_voice",
+        "ssml_support",
+        "audio_streaming"
+      ]
     },
     "Node_18_DeepL": {
       "port": 8018,
@@ -286,7 +317,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_25_GoogleSearch"
+      "description": "Google搜索节点，支持网页搜索、图片搜索和结果解析",
+      "capabilities": [
+        "web_search",
+        "image_search",
+        "result_parsing",
+        "safe_search"
+      ]
     },
     "Node_28_Reserved": {
       "port": 8028,
@@ -296,7 +333,12 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_28_Reserved"
+      "description": "预留扩展节点A - 插件系统框架",
+      "capabilities": [
+        "plugin_loading",
+        "dynamic_extension",
+        "hot_reload"
+      ]
     },
     "Node_29_Reserved": {
       "port": 8029,
@@ -306,7 +348,12 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_29_Reserved"
+      "description": "预留扩展节点B - 插件管理系统",
+      "capabilities": [
+        "plugin_management",
+        "lifecycle_control",
+        "dependency_injection"
+      ]
     },
     "Node_30_Reserved": {
       "port": 8030,
@@ -316,7 +363,12 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_30_Reserved"
+      "description": "预留扩展节点C - 事件总线",
+      "capabilities": [
+        "event_bus",
+        "pub_sub",
+        "message_routing"
+      ]
     },
     "Node_31_Reserved": {
       "port": 8031,
@@ -326,7 +378,12 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_31_Reserved"
+      "description": "预留扩展节点D - 任务调度",
+      "capabilities": [
+        "task_scheduling",
+        "cron_jobs",
+        "delayed_execution"
+      ]
     },
     "Node_32_Reserved": {
       "port": 8032,
@@ -336,7 +393,12 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_32_Reserved"
+      "description": "预留扩展节点E - 数据管道",
+      "capabilities": [
+        "data_pipeline",
+        "stream_processing",
+        "batch_processing"
+      ]
     },
     "Node_33_ADB": {
       "port": 8033,
@@ -366,7 +428,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_35_AppleScript"
+      "description": "AppleScript自动化节点，支持macOS系统控制和应用自动化",
+      "capabilities": [
+        "macos_automation",
+        "app_control",
+        "system_events",
+        "ui_scripting"
+      ]
     },
     "Node_36_UIAWindows": {
       "port": 8036,
@@ -386,7 +454,12 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_37_LinuxDBus"
+      "description": "Linux D-Bus通信节点，支持系统服务交互和桌面通知",
+      "capabilities": [
+        "dbus_communication",
+        "service_discovery",
+        "desktop_notifications"
+      ]
     },
     "Node_38_BLE": {
       "port": 8038,
@@ -396,7 +469,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_38_BLE"
+      "description": "蓝牙低功耗节点，支持设备扫描、连接和数据传输",
+      "capabilities": [
+        "device_scanning",
+        "ble_connection",
+        "gatt_operations",
+        "notifications"
+      ]
     },
     "Node_39_SSH": {
       "port": 8039,
@@ -416,7 +495,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_40_SFTP"
+      "description": "SFTP文件传输节点，支持安全文件上传下载和目录管理",
+      "capabilities": [
+        "file_upload",
+        "file_download",
+        "directory_management",
+        "ssh_key_auth"
+      ]
     },
     "Node_41_MQTT": {
       "port": 8041,
@@ -436,7 +521,12 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_42_CANbus"
+      "description": "CAN总线通信节点，支持车载网络和工业控制",
+      "capabilities": [
+        "can_communication",
+        "message_filtering",
+        "protocol_support"
+      ]
     },
     "Node_43_MAVLink": {
       "port": 8043,
@@ -456,7 +546,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_44_NFC"
+      "description": "NFC近场通信节点，支持标签读写和设备配对",
+      "capabilities": [
+        "tag_reading",
+        "tag_writing",
+        "ndef_support",
+        "device_pairing"
+      ]
     },
     "Node_45_DesktopAuto": {
       "port": 8045,
@@ -476,7 +572,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_46_Camera"
+      "description": "摄像头控制节点，支持图像采集、视频录制和实时流",
+      "capabilities": [
+        "image_capture",
+        "video_recording",
+        "live_streaming",
+        "camera_control"
+      ]
     },
     "Node_47_Audio": {
       "port": 8047,
@@ -486,7 +588,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_47_Audio"
+      "description": "音频处理节点，支持录音、播放、格式转换和效果处理",
+      "capabilities": [
+        "audio_recording",
+        "audio_playback",
+        "format_conversion",
+        "audio_effects"
+      ]
     },
     "Node_48_MediaGen": {
       "port": 8048,
@@ -506,7 +614,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_48_Serial"
+      "description": "串口通信节点，支持RS232/RS485设备连接和数据传输",
+      "capabilities": [
+        "serial_communication",
+        "device_connection",
+        "data_transfer",
+        "protocol_handling"
+      ]
     },
     "Node_49_OctoPrint": {
       "port": 8049,
@@ -666,7 +780,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_66_ConfigManager"
+      "description": "配置管理节点，支持动态配置、热更新和配置验证",
+      "capabilities": [
+        "config_management",
+        "hot_reload",
+        "validation",
+        "version_control"
+      ]
     },
     "Node_67_HealthMonitor": {
       "port": 8067,
@@ -716,7 +836,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_71_MediaGen"
+      "description": "媒体生成节点，支持图像生成、视频生成和音频合成",
+      "capabilities": [
+        "image_generation",
+        "video_generation",
+        "audio_synthesis",
+        "ai_models"
+      ]
     },
     "Node_72_KnowledgeBase": {
       "port": 8072,
@@ -726,7 +852,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_72_KnowledgeBase"
+      "description": "知识库节点，支持知识存储、检索和推理",
+      "capabilities": [
+        "knowledge_storage",
+        "semantic_search",
+        "reasoning",
+        "graph_queries"
+      ]
     },
     "Node_73_Learning": {
       "port": 8073,
@@ -736,7 +868,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_73_Learning"
+      "description": "机器学习节点，支持模型训练、推理和在线学习",
+      "capabilities": [
+        "model_training",
+        "inference",
+        "online_learning",
+        "model_management"
+      ]
     },
     "Node_74_DigitalTwin": {
       "port": 8074,
@@ -746,7 +884,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_74_DigitalTwin"
+      "description": "数字孪生节点，支持物理系统建模、仿真和同步",
+      "capabilities": [
+        "system_modeling",
+        "simulation",
+        "state_sync",
+        "prediction"
+      ]
     },
     "Node_79_LocalLLM": {
       "port": 8079,
@@ -866,7 +1010,13 @@
         "Node_01_OneAPI"
       ],
       "optional_dependencies": [],
-      "description": "Auto-generated config for Node_96_SmartTransportRouter"
+      "description": "智能传输路由节点，支持多协议路由、负载均衡和故障转移",
+      "capabilities": [
+        "multi_protocol_routing",
+        "load_balancing",
+        "failover",
+        "qos_management"
+      ]
     },
     "Node_97_AcademicSearch": {
       "port": 8097,
