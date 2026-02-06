@@ -67,14 +67,15 @@ class AutonomousScheduler:
     def get_tools(self) -> List[Dict[str, Any]]:
         return self.tools_cache
 
-    async def plan_and_execute(self, instruction: str, llm_client: Any, context: Dict[str, Any] = None) -> Dict[str, Any]:
+    async def plan_and_execute(self, instruction: str, llm_manager: Any, context: Dict[str, Any] = None, max_turns: int = 5) -> Dict[str, Any]:
         """
-        核心调度逻辑：
+        核心调度逻辑 (ReAct Loop)：
         1. 接收指令
-        2. 注入动态设备上下文 (Device-as-Node)
-        3. 调用 LLM 进行规划 (Function Calling)
-        4. 解析并执行节点调用
-        5. 返回结果
+        2. 注入动态设备上下文
+        3. 进入思考-行动循环：
+           - 调用 LLM
+           - 如果有 Tool Calls -> 执行 -> 将结果追加到历史 -> 继续循环
+           - 如果无 Tool Calls -> 任务结束，返回回复
         """
         # 1. 构建动态设备上下文
         device_context = "No devices connected."
@@ -89,7 +90,7 @@ class AutonomousScheduler:
 
         system_prompt = f"""You are the central scheduler of the UFO Galaxy system. 
 Your goal is to satisfy the user's request by autonomously calling the available node tools.
-You can call multiple tools in sequence if needed.
+You operate in a ReAct (Reasoning + Acting) loop. You can call tools, observe their output, and then decide the next step.
 
 CRITICAL: "Device-as-Node" Protocol
 You have access to real-time connected hardware devices. 
@@ -107,25 +108,31 @@ you MUST:
             {"role": "user", "content": instruction}
         ]
         
-        # if context: # Context is now integrated into system prompt
-        #    messages.append({"role": "system", "content": f"Context: {json.dumps(context)}"})
+        executed_steps = []
+        final_reply = ""
 
         try:
-            # 模拟 LLM 调用 (实际集成时需要传入真实的 client)
-            # 这里我们假设 llm_client 是一个兼容 OpenAI 接口的对象
-            response = await llm_client.chat.completions.create(
-                model="gpt-4o", # 或配置的模型
-                messages=messages,
-                tools=self.tools_cache,
-                tool_choice="auto"
-            )
-            
-            message = response.choices[0].message
-            tool_calls = message.tool_calls
-            
-            results = []
-            
-            if tool_calls:
+            for turn in range(max_turns):
+                logger.info(f"ReAct Loop Turn {turn+1}/{max_turns}")
+                
+                # 调用 LLM Manager
+                response = await llm_manager.chat_completion(
+                    messages=messages,
+                    tools=self.tools_cache,
+                    tool_choice="auto"
+                )
+                
+                message = response.choices[0].message
+                messages.append(message) # 将 LLM 的回复追加到历史
+                
+                tool_calls = message.tool_calls
+                
+                if not tool_calls:
+                    # LLM 认为任务已完成，或者是纯对话回复
+                    final_reply = message.content
+                    break
+                
+                # 执行工具调用
                 for tool_call in tool_calls:
                     function_name = tool_call.function.name
                     function_args = json.loads(tool_call.function.arguments)
@@ -134,21 +141,37 @@ you MUST:
                     action = function_args.get("action")
                     params = function_args.get("params", {})
                     
-                    logger.info(f"自主调度: 调用节点 {node_id}, 动作: {action}")
+                    logger.info(f"自主调度: 执行节点 {node_id}, 动作: {action}")
                     
-                    # 这里需要回调 api_routes 中的 _execute_node
-                    # 为了解耦，我们返回执行计划，由调用者执行
-                    results.append({
+                    # 执行节点 (这里需要回调 context 中提供的执行器，或者直接调用 api_routes 的逻辑)
+                    # 为了保持 scheduler 独立，我们假设 context 中传入了一个 executor 函数
+                    tool_result_content = "Error: Executor not provided in context"
+                    if context and "executor" in context:
+                        try:
+                            # executor 应该是一个 async 函数，接收 node_id, action, params
+                            result = await context["executor"](node_id, action, params)
+                            tool_result_content = json.dumps(result, ensure_ascii=False)
+                        except Exception as exec_err:
+                            tool_result_content = f"Execution Error: {str(exec_err)}"
+                    
+                    # 将执行结果追加到历史
+                    messages.append({
+                        "role": "tool",
+                        "tool_call_id": tool_call.id,
+                        "name": function_name,
+                        "content": tool_result_content
+                    })
+                    
+                    executed_steps.append({
                         "node_id": node_id,
                         "action": action,
-                        "params": params,
-                        "tool_call_id": tool_call.id
+                        "result": tool_result_content
                     })
-            
+
             return {
                 "success": True,
-                "plan": results,
-                "reply": message.content
+                "steps": executed_steps,
+                "reply": final_reply or "Task completed (no final text reply)."
             }
             
         except Exception as e:
