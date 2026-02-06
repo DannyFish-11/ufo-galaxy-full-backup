@@ -577,9 +577,9 @@ class UnifiedWebUI:
         self.app = None
         
     async def start(self):
-        """启动 Web UI"""
+        """启动 Web UI 和完整 API 服务"""
         try:
-            from fastapi import FastAPI, HTTPException
+            from fastapi import FastAPI
             from fastapi.responses import HTMLResponse, JSONResponse
             from fastapi.middleware.cors import CORSMiddleware
             import uvicorn
@@ -598,6 +598,50 @@ class UnifiedWebUI:
                 allow_headers=["*"]
             )
             
+            # === 集成完整 API 路由 ===
+            try:
+                from core.api_routes import create_api_routes, create_websocket_routes
+                
+                # 注册 REST API 路由
+                api_router = create_api_routes(
+                    service_manager=self.service_manager,
+                    config=self.config
+                )
+                self.app.include_router(api_router)
+                logger.info("完整 API 路由已加载")
+                
+                # 注册 WebSocket 端点
+                create_websocket_routes(
+                    self.app,
+                    service_manager=self.service_manager
+                )
+                logger.info("WebSocket 端点已加载")
+                
+            except ImportError as e:
+                logger.warning(f"API 路由模块加载失败，使用基础路由: {e}")
+            
+            # === 健康检查路由 ===
+            try:
+                from core.health_check import create_health_routes
+                health_router, health_checker = create_health_routes(
+                    service_manager=self.service_manager,
+                    config=self.config
+                )
+                self.app.include_router(health_router)
+                logger.info("健康检查路由已加载")
+            except ImportError as e:
+                logger.warning(f"健康检查模块加载失败: {e}")
+            
+            # === 初始化缓存 ===
+            try:
+                from core.cache import get_cache
+                redis_url = self.config.redis_url if hasattr(self.config, 'redis_url') else ""
+                cache = asyncio.get_event_loop().run_until_complete(get_cache(redis_url))
+                logger.info(f"缓存已初始化: {cache.backend_type}")
+            except Exception as e:
+                logger.warning(f"缓存初始化失败: {e}")
+            
+            # === 基础路由（始终可用）===
             @self.app.get("/", response_class=HTMLResponse)
             async def index():
                 return self._get_dashboard_html()
@@ -615,6 +659,10 @@ class UnifiedWebUI:
             @self.app.get("/api/services")
             async def services():
                 return JSONResponse(self.service_manager.get_status())
+            
+            @self.app.get("/api/health")
+            async def health():
+                return {"status": "healthy"}
                 
             config = uvicorn.Config(
                 self.app,
@@ -623,6 +671,8 @@ class UnifiedWebUI:
                 log_level="warning"
             )
             server = uvicorn.Server(config)
+            logger.info(f"API 服务启动: http://0.0.0.0:{self.config.web_ui_port}")
+            logger.info(f"API 文档: http://localhost:{self.config.web_ui_port}/docs")
             await server.serve()
             
         except ImportError as e:

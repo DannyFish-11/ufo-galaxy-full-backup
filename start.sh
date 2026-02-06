@@ -77,8 +77,12 @@ pip install -q -r requirements.txt 2>/dev/null || pip install -r requirements.tx
 # 启动系统
 echo ""
 print_status "info" "启动 UFO Galaxy..."
+print_status "info" "控制面板: http://localhost:${WEB_UI_PORT:-8080}"
+print_status "info" "API 文档: http://localhost:${WEB_UI_PORT:-8080}/docs"
+print_status "info" "健康检查: http://localhost:${WEB_UI_PORT:-8080}/health"
 echo ""
-python3 main.py "$@"
+export PYTHONPATH="$SCRIPT_DIR:$PYTHONPATH"
+python3 unified_launcher.py "$@"
 
 # 退出
 deactivate
