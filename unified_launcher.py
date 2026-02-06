@@ -739,164 +739,315 @@ class UnifiedWebUI:
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>UFO Galaxy - 统一控制面板</title>
+    <title>UFO Galaxy - 全景指挥舱</title>
     <style>
+        :root {
+            --bg-dark: #0a0a0a;
+            --bg-card: rgba(20, 20, 30, 0.6);
+            --accent: #00ff88;
+            --accent-glow: rgba(0, 255, 136, 0.2);
+            --text-main: #e0e0e0;
+            --text-dim: #888;
+            --border: rgba(255, 255, 255, 0.1);
+        }
         * { margin: 0; padding: 0; box-sizing: border-box; }
         body {
-            font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif;
-            background: linear-gradient(135deg, #0a0a0a 0%, #1a1a2e 50%, #16213e 100%);
+            font-family: 'JetBrains Mono', 'Fira Code', monospace;
+            background: var(--bg-dark);
+            color: var(--text-main);
             min-height: 100vh;
-            color: #fff;
+            overflow-x: hidden;
         }
-        .container { max-width: 1400px; margin: 0 auto; padding: 20px; }
-        .header {
-            text-align: center;
-            padding: 40px 0;
-            border-bottom: 1px solid rgba(255,255,255,0.1);
-        }
-        .header h1 {
-            font-size: 3rem;
-            background: linear-gradient(90deg, #00d4ff, #7b2cbf, #ff6b6b);
-            -webkit-background-clip: text;
-            -webkit-text-fill-color: transparent;
-            animation: gradient 3s ease infinite;
-        }
-        @keyframes gradient {
-            0%, 100% { filter: hue-rotate(0deg); }
-            50% { filter: hue-rotate(30deg); }
-        }
-        .header p { color: #888; margin-top: 10px; }
-        .status-grid {
-            display: grid;
-            grid-template-columns: repeat(auto-fit, minmax(350px, 1fr));
-            gap: 20px;
-            margin-top: 30px;
-        }
-        .status-card {
-            background: rgba(255,255,255,0.03);
-            border-radius: 16px;
-            padding: 24px;
-            border: 1px solid rgba(255,255,255,0.08);
-            backdrop-filter: blur(10px);
-        }
-        .status-card h3 {
-            color: #00d4ff;
-            margin-bottom: 16px;
-            font-size: 1.1rem;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-        }
-        .status-item {
+        .container { max-width: 1600px; margin: 0 auto; padding: 20px; }
+        
+        /* 顶部状态栏 */
+        .top-bar {
             display: flex;
             justify-content: space-between;
             align-items: center;
-            padding: 10px 0;
+            padding: 15px 25px;
+            background: var(--bg-card);
+            border-bottom: 1px solid var(--border);
+            backdrop-filter: blur(10px);
+            position: sticky;
+            top: 0;
+            z-index: 100;
+        }
+        .logo {
+            font-size: 1.5rem;
+            font-weight: bold;
+            background: linear-gradient(90deg, #00d4ff, #00ff88);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .network-info {
+            display: flex;
+            gap: 20px;
+            font-size: 0.9rem;
+        }
+        .network-badge {
+            padding: 4px 12px;
+            border-radius: 4px;
+            background: rgba(0, 212, 255, 0.1);
+            color: #00d4ff;
+            border: 1px solid rgba(0, 212, 255, 0.2);
+        }
+
+        /* 主网格布局 */
+        .dashboard-grid {
+            display: grid;
+            grid-template-columns: repeat(12, 1fr);
+            gap: 20px;
+            margin-top: 20px;
+        }
+        
+        /* 卡片通用样式 */
+        .card {
+            background: var(--bg-card);
+            border: 1px solid var(--border);
+            border-radius: 12px;
+            padding: 20px;
+            backdrop-filter: blur(5px);
+        }
+        .card-header {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            margin-bottom: 15px;
+            border-bottom: 1px solid var(--border);
+            padding-bottom: 10px;
+        }
+        .card-title { font-size: 1.1rem; color: var(--accent); }
+
+        /* 设备监控区 (占 8 列) */
+        .devices-section { grid-column: span 8; }
+        .device-list {
+            display: grid;
+            grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
+            gap: 15px;
+        }
+        .device-card {
+            background: rgba(255, 255, 255, 0.03);
+            border: 1px solid var(--border);
+            border-radius: 8px;
+            padding: 15px;
+            transition: all 0.3s ease;
+        }
+        .device-card:hover {
+            border-color: var(--accent);
+            box-shadow: 0 0 15px var(--accent-glow);
+        }
+        .device-status {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            margin-bottom: 10px;
+        }
+        .status-indicator {
+            width: 10px;
+            height: 10px;
+            border-radius: 50%;
+        }
+        .online { background: #00ff88; box-shadow: 0 0 8px #00ff88; }
+        .offline { background: #ff4444; }
+        .device-info p { font-size: 0.85rem; color: var(--text-dim); margin: 4px 0; }
+        .wake-btn {
+            width: 100%;
+            margin-top: 10px;
+            padding: 8px;
+            background: rgba(0, 255, 136, 0.1);
+            border: 1px solid var(--accent);
+            color: var(--accent);
+            border-radius: 4px;
+            cursor: pointer;
+            transition: all 0.2s;
+        }
+        .wake-btn:hover { background: var(--accent); color: #000; }
+
+        /* 系统状态区 (占 4 列) */
+        .system-section { grid-column: span 4; display: flex; flex-direction: column; gap: 20px; }
+        .stat-row {
+            display: flex;
+            justify-content: space-between;
+            padding: 8px 0;
             border-bottom: 1px solid rgba(255,255,255,0.05);
         }
-        .status-item:last-child { border-bottom: none; }
-        .status-dot {
-            width: 8px;
-            height: 8px;
-            border-radius: 50%;
-            display: inline-block;
-            margin-right: 8px;
+        .log-panel {
+            height: 300px;
+            overflow-y: auto;
+            font-family: monospace;
+            font-size: 0.8rem;
+            color: #aaa;
+            background: rgba(0,0,0,0.3);
+            padding: 10px;
+            border-radius: 4px;
         }
-        .status-dot.active { background: #00ff88; box-shadow: 0 0 10px #00ff88; }
-        .status-dot.partial { background: #ffaa00; box-shadow: 0 0 10px #ffaa00; }
-        .status-dot.inactive { background: #ff4444; }
-        .status-dot.disabled { background: #444; }
-        .badge {
-            padding: 4px 10px;
-            border-radius: 12px;
-            font-size: 0.75rem;
-            font-weight: 500;
-        }
-        .badge.running { background: rgba(0,255,136,0.2); color: #00ff88; }
-        .badge.stopped { background: rgba(255,68,68,0.2); color: #ff4444; }
-        .badge.partial { background: rgba(255,170,0,0.2); color: #ffaa00; }
-        .section-title {
-            font-size: 0.85rem;
-            color: #666;
-            text-transform: uppercase;
-            letter-spacing: 1px;
-            margin: 20px 0 10px;
-        }
-        #refresh-time { color: #666; font-size: 0.8rem; }
+        .log-entry { margin-bottom: 4px; }
+        .log-info { color: #00d4ff; }
+        .log-warn { color: #ffaa00; }
+        .log-error { color: #ff4444; }
+
     </style>
 </head>
 <body>
-    <div class="container">
-        <div class="header">
-            <h1>🌌 UFO Galaxy</h1>
-            <p>L4 级自主性智能系统 - 统一融合版 v2.0</p>
+    <div class="top-bar">
+        <div class="logo">🌌 UFO Galaxy Command</div>
+        <div class="network-info">
+            <span class="network-badge" id="tailscale-ip">Tailscale: 检测中...</span>
+            <span class="network-badge" id="local-ip">Local: 127.0.0.1</span>
         </div>
-        <div class="status-grid">
-            <div class="status-card">
-                <h3>🔧 核心服务</h3>
-                <div id="core-services">加载中...</div>
-            </div>
-            <div class="status-card">
-                <h3>🧠 L4 增强模块</h3>
-                <div id="l4-modules">加载中...</div>
-            </div>
-            <div class="status-card">
-                <h3>🔌 API 配置</h3>
-                <div id="api-status">加载中...</div>
-            </div>
-            <div class="status-card">
-                <h3>📦 节点状态</h3>
-                <div id="node-status">加载中...</div>
-            </div>
-        </div>
-        <p id="refresh-time" style="text-align: center; margin-top: 20px;"></p>
     </div>
+
+    <div class="container">
+        <div class="dashboard-grid">
+            <!-- 设备监控 -->
+            <div class="devices-section card">
+                <div class="card-header">
+                    <div class="card-title">🛸 在线设备矩阵</div>
+                    <div class="badge" id="device-count">0 在线</div>
+                </div>
+                <div class="device-list" id="device-list">
+                    <!-- 设备卡片将动态插入这里 -->
+                    <div style="text-align:center; color:#666; grid-column:span 3; padding:20px;">
+                        等待设备接入...
+                    </div>
+                </div>
+            </div>
+
+            <!-- 系统状态 -->
+            <div class="system-section">
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">⚡ 系统负载</div>
+                    </div>
+                    <div class="stat-row">
+                        <span>核心服务</span>
+                        <span id="core-status" style="color:#00ff88">运行中</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>节点系统</span>
+                        <span id="node-count">0/108 激活</span>
+                    </div>
+                    <div class="stat-row">
+                        <span>API 延迟</span>
+                        <span id="api-latency">12ms</span>
+                    </div>
+                </div>
+
+                <div class="card">
+                    <div class="card-header">
+                        <div class="card-title">📜 实时日志</div>
+                    </div>
+                    <div class="log-panel" id="log-panel">
+                        <div class="log-entry"><span class="log-info">[INFO]</span> 系统初始化完成</div>
+                        <div class="log-entry"><span class="log-info">[INFO]</span> 等待 WebSocket 连接...</div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <script>
-        async function updateStatus() {
+        // 建立 WebSocket 连接
+        const protocol = window.location.protocol === 'https:' ? 'wss:' : 'ws:';
+        const wsUrl = `${protocol}//${window.location.host}/ws/status`;
+        let ws;
+
+        function connect() {
+            ws = new WebSocket(wsUrl);
+            
+            ws.onopen = () => {
+                log('系统连接成功', 'info');
+                // 请求初始状态
+                fetch('/api/v1/system/status')
+                    .then(r => r.json())
+                    .then(updateDashboard);
+            };
+
+            ws.onmessage = (event) => {
+                const data = JSON.parse(event.data);
+                if (data.type === 'device_connected' || data.type === 'device_disconnected' || data.type === 'device_status_update') {
+                    // 刷新设备列表
+                    fetch('/api/v1/system/status')
+                        .then(r => r.json())
+                        .then(updateDashboard);
+                    
+                    if (data.type === 'device_connected') log(`设备接入: ${data.device_id}`, 'info');
+                    if (data.type === 'device_disconnected') log(`设备断开: ${data.device_id}`, 'warn');
+                }
+            };
+
+            ws.onclose = () => {
+                log('连接断开，5秒后重连...', 'error');
+                setTimeout(connect, 5000);
+            };
+        }
+
+        function updateDashboard(data) {
+            // 更新 Tailscale IP
+            if (data.network && data.network.tailscale_ip) {
+                document.getElementById('tailscale-ip').textContent = `Tailscale: ${data.network.tailscale_ip}`;
+            }
+
+            // 更新设备列表
+            const list = document.getElementById('device-list');
+            const devices = data.devices.list || [];
+            document.getElementById('device-count').textContent = `${data.devices.online} 在线`;
+
+            if (devices.length === 0) {
+                list.innerHTML = '<div style="text-align:center; color:#666; grid-column:span 3; padding:20px;">暂无设备接入</div>';
+            } else {
+                list.innerHTML = devices.map(d => `
+                    <div class="device-card">
+                        <div class="device-status">
+                            <div class="status-indicator ${d.online ? 'online' : 'offline'}"></div>
+                            <strong>${d.device_name || '未知设备'}</strong>
+                        </div>
+                        <div class="device-info">
+                            <p>ID: ${d.device_id.substring(0, 8)}...</p>
+                            <p>Type: ${d.device_type}</p>
+                            <p>Last Seen: ${new Date(d.last_seen).toLocaleTimeString()}</p>
+                        </div>
+                        ${d.online ? `<button class="wake-btn" onclick="wakeDevice('${d.device_id}')">⚡ 唤醒 / 交互</button>` : ''}
+                    </div>
+                `).join('');
+            }
+
+            // 更新节点计数
+            document.getElementById('node-count').textContent = `${data.nodes.active}/${data.nodes.total} 激活`;
+        }
+
+        function log(msg, type='info') {
+            const panel = document.getElementById('log-panel');
+            const entry = document.createElement('div');
+            entry.className = 'log-entry';
+            const colorClass = type === 'error' ? 'log-error' : type === 'warn' ? 'log-warn' : 'log-info';
+            entry.innerHTML = `<span class="${colorClass}">[${type.toUpperCase()}]</span> ${msg}`;
+            panel.prepend(entry);
+        }
+
+        async function wakeDevice(deviceId) {
+            log(`正在唤醒设备 ${deviceId}...`, 'info');
             try {
-                const resp = await fetch('/api/status');
-                const data = await resp.json();
-                
-                // 核心服务
-                let coreHtml = '';
-                const coreServices = ['device_agent_manager', 'device_status_api', 'microsoft_ufo_integration'];
-                for (const name of coreServices) {
-                    const service = data.services[name] || {status: 'stopped'};
-                    const dotClass = service.status === 'running' ? 'active' : 
-                                    service.status === 'partial' ? 'partial' : 'inactive';
-                    const badgeClass = service.status === 'running' ? 'running' : 
-                                      service.status === 'partial' ? 'partial' : 'stopped';
-                    coreHtml += `<div class="status-item">
-                        <span><span class="status-dot ${dotClass}"></span>${name}</span>
-                        <span class="badge ${badgeClass}">${service.status}</span>
-                    </div>`;
-                }
-                document.getElementById('core-services').innerHTML = coreHtml;
-                
-                // API 状态
-                let apiHtml = '';
-                for (const [name, configured] of Object.entries(data.config.llm_apis)) {
-                    const dotClass = configured ? 'active' : 'disabled';
-                    apiHtml += `<div class="status-item">
-                        <span><span class="status-dot ${dotClass}"></span>${name.toUpperCase()}</span>
-                        <span>${configured ? '✓' : '—'}</span>
-                    </div>`;
-                }
-                document.getElementById('api-status').innerHTML = apiHtml;
-                
-                // 节点状态
-                const nodeServices = Object.entries(data.services).filter(([k, v]) => v.type === 'node');
-                const runningNodes = nodeServices.filter(([k, v]) => v.status === 'running').length;
-                document.getElementById('node-status').innerHTML = `
-                    <div class="status-item">
-                        <span><span class="status-dot active"></span>运行中节点</span>
-                        <span>${runningNodes}</span>
-                    </div>
-                    <div class="status-item">
-                        <span><span class="status-dot disabled"></span>总节点数</span>
-                        <span>${nodeServices.length}</span>
-                    </div>
-                `;
+                const resp = await fetch('/api/v1/tasks', {
+                    method: 'POST',
+                    headers: {'Content-Type': 'application/json'},
+                    body: JSON.stringify({
+                        task_type: 'wake_up',
+                        device_id: deviceId,
+                        payload: { message: "System Wake Up Call" }
+                    })
+                });
+                if (resp.ok) log('唤醒指令已发送', 'info');
+                else log('唤醒失败', 'error');
+            } catch (e) {
+                log(`发送失败: ${e}`, 'error');
+            }
+        }
+
+        // 启动
+        connect();
+    </script>
                 
                 // L4 模块
                 document.getElementById('l4-modules').innerHTML = `

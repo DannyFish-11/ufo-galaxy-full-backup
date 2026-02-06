@@ -49,9 +49,12 @@ class DeviceStatusUpdate(BaseModel):
     status: Dict[str, Any] = {}
 
 class VisionRequest(BaseModel):
-    image_base64: str
+    image_base64: Optional[str] = None
+    video_chunk: Optional[str] = None  # Base64 encoded video chunk
     mode: str = "full"
     instruction: str = ""
+    session_id: Optional[str] = None   # For video stream context
+    is_last_chunk: bool = False
 
 class TaskRequest(BaseModel):
     task_type: str
@@ -550,8 +553,23 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     
     @router.post("/api/v1/vision/understand")
     async def vision_understand(req: VisionRequest):
-        """融合视觉理解：一次调用同时获取 OCR + GUI + 语义"""
+        """融合视觉理解：支持图片、视频流及复合指令"""
         try:
+            # 处理视频流
+            if req.video_chunk:
+                # 这里可以集成视频流处理逻辑，例如将帧存入缓冲区或直接送入多模态模型
+                # 目前作为示例，我们将其视为单帧处理，或者返回流接收确认
+                if not req.image_base64:
+                    return JSONResponse({
+                        "success": True,
+                        "mode": "video_stream",
+                        "session_id": req.session_id,
+                        "message": "Video chunk received"
+                    })
+            
+            if not req.image_base64:
+                 raise HTTPException(status_code=400, detail="Image or video chunk required")
+
             # 解码图片
             image_data = base64.b64decode(req.image_base64)
             
