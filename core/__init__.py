@@ -62,6 +62,10 @@ def get_system_load_monitor():
     from .system_load_monitor import SystemLoadMonitor
     return SystemLoadMonitor()
 
+def get_vision_pipeline(config=None):
+    from .vision_pipeline import get_vision_pipeline as _get
+    return _get(config)
+
 __all__ = [
     # 节点注册表
     'NodeRegistry',
@@ -95,6 +99,7 @@ __all__ = [
     'get_device_status_api',
     'get_microsoft_ufo_integration',
     'get_system_load_monitor',
+    'get_vision_pipeline',
 ]
 
 __version__ = '2.0.0'

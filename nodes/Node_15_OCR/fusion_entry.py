@@ -21,12 +21,13 @@ logger = logging.getLogger("Node_15_OCR")
 
 
 class FusionNode:
-    """OCR 融合节点，支持 DeepSeek OCR 2 和 Tesseract 双引擎"""
+    """OCR 融合节点，通过 VisionPipeline 与 GUI 理解深度融合"""
 
     def __init__(self):
         self.node_id = "Node_15_OCR"
         self.instance = None
         self.ocr_adapter = None
+        self.vision_pipeline = None
         self._load_original_logic()
 
     def _load_original_logic(self):
@@ -58,6 +59,18 @@ class FusionNode:
             logger.info(f"✅ {self.node_id} DeepSeek OCR 2 适配器已就绪")
         except Exception as e:
             logger.warning(f"⚠️ {self.node_id} 适配器初始化失败: {e}")
+
+        # 接入 VisionPipeline（与 Node_90 共享同一管线实例）
+        try:
+            project_root = os.path.join(current_dir, '..', '..')
+            if project_root not in sys.path:
+                sys.path.insert(0, project_root)
+            from core.vision_pipeline import get_vision_pipeline
+            self.vision_pipeline = get_vision_pipeline()
+            logger.info(f"✅ {self.node_id} 已接入 VisionPipeline 融合管线")
+        except Exception as e:
+            self.vision_pipeline = None
+            logger.warning(f"⚠️ {self.node_id} VisionPipeline 未接入: {e}")
 
     async def execute(self, command: str, **params) -> Dict[str, Any]:
         """
@@ -104,6 +117,24 @@ class FusionNode:
                     result = await self.ocr_adapter.custom_query(image_source, prompt)
                     return {"success": True, "data": result}
 
+                elif command == "ui_analysis_fused":
+                    # 融合模式：通过 VisionPipeline 同时获取 OCR + GUI
+                    if self.vision_pipeline:
+                        import base64
+                        if isinstance(image_source, str) and os.path.isfile(image_source):
+                            with open(image_source, 'rb') as f:
+                                img_b64 = base64.b64encode(f.read()).decode()
+                        else:
+                            img_b64 = image_source
+                        result = await self.vision_pipeline.understand(
+                            image_base64=img_b64, mode="full",
+                            task_context=params.get("task_context", ""),
+                        )
+                        return {"success": result.success, "data": result.to_dict()}
+                    else:
+                        result = await self.ocr_adapter.analyze_ui(image_source)
+                        return {"success": True, "data": result}
+
                 elif command == "status":
                     return {
                         "success": True,
@@ -111,6 +142,7 @@ class FusionNode:
                             "engine": "deepseek_ocr2",
                             "available": True,
                             "adapter": "DeepSeekOCRAdapter",
+                            "vision_pipeline": self.vision_pipeline is not None,
                         },
                     }
 
