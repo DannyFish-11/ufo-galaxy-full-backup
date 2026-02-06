@@ -20,7 +20,8 @@ import logging
 import os
 import json
 from dataclasses import dataclass, field
-from enum import Enumrom typing import Optional, Dict, Any, List
+from enum import Enum
+from typing import Optional, Dict, Any, List
 
 import aiohttp
 

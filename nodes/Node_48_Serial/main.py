@@ -282,7 +282,7 @@ async def main():
     if service.status == NodeStatus.RUNNING:
         try:
             # 模拟发送一条指令
-            await service.send_data(b'\xAT+INFO?\r\n')
+            await service.send_data(b'AT+INFO?\r\n')
 
             # 等待接收响应
             response = await service.read_data(timeout=5.0)

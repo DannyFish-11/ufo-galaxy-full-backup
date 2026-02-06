@@ -1,4 +1,3 @@
-'''
 # -*- coding: utf-8 -*-
 
 """
@@ -358,4 +357,3 @@ if __name__ == "__main__":
             os.remove("node_47_audio.log")
         logger.info("清理完成。")
 
-'''"))oxiaotool_code_exec_result = await default_api.file(brief="为Node_47_Audio生成main.py的完整Python代码", action="write", path="main.py", text=

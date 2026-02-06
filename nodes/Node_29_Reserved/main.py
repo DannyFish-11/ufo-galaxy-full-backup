@@ -234,7 +234,7 @@ class ReservedService:
     async def _create_example_plugin(self):
         """如果插件目录为空，则创建一个示例插件文件"""
         example_plugin_path = os.path.join(self.config.plugin_directory, "example_plugin.py")
-        example_code = """
+        example_code = '''
 from . import PluginBase, logger
 import asyncio
 
@@ -246,7 +246,7 @@ class ExamplePlugin(PluginBase):
         await asyncio.sleep(1)
         logger.info("示例插件设置完成")
 
-    async def execute(self, message: str = \"Hello, Plugin World!\") -> str:
+    async def execute(self, message: str = "Hello, Plugin World!") -> str:
         logger.info(f"示例插件正在执行，收到消息: {message}")
         return f"示例插件已处理消息: {message}"
 
@@ -254,7 +254,7 @@ class ExamplePlugin(PluginBase):
         logger.info("示例插件正在清理...")
         await asyncio.sleep(1)
         logger.info("示例插件清理完成")
-"""
+'''
         # 调整导入路径以适应动态加载
         fixed_code = example_code.replace("from . import", "from main import")
 
