@@ -314,7 +314,7 @@ class ServiceManager:
             try:
                 service.process.terminate()
                 service.process.wait(timeout=5)
-            except:
+            except (subprocess.TimeoutExpired, OSError):
                 service.process.kill()
             service.process = None
             
@@ -689,8 +689,6 @@ class UnifiedWebUI:
                     return JSONResponse({"error": "index.html not found"}, status_code=404)
                 
                 logger.info(f"API Manager 已挂载: {static_dir}")
-                
-                logger.info(f"API Manager 已挂载: {static_dir}")
             else:
                 logger.warning(f"API Manager 静态文件未找到: {static_dir}")
 
@@ -1047,36 +1045,6 @@ class UnifiedWebUI:
 
         // 启动
         connect();
-    </script>
-                
-                // L4 模块
-                document.getElementById('l4-modules').innerHTML = `
-                    <div class="status-item">
-                        <span><span class="status-dot active"></span>感知模块</span>
-                        <span class="badge running">active</span>
-                    </div>
-                    <div class="status-item">
-                        <span><span class="status-dot active"></span>推理模块</span>
-                        <span class="badge running">active</span>
-                    </div>
-                    <div class="status-item">
-                        <span><span class="status-dot active"></span>学习模块</span>
-                        <span class="badge running">active</span>
-                    </div>
-                    <div class="status-item">
-                        <span><span class="status-dot active"></span>执行模块</span>
-                        <span class="badge running">active</span>
-                    </div>
-                `;
-                
-                document.getElementById('refresh-time').textContent = 
-                    '最后更新: ' + new Date().toLocaleTimeString();
-            } catch (e) {
-                console.error(e);
-            }
-        }
-        updateStatus();
-        setInterval(updateStatus, 3000);
     </script>
 </body>
 </html>

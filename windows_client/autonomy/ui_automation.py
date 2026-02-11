@@ -102,7 +102,7 @@ class UIAutomationWrapper:
                     if not parent or parent == self.root:
                         break
                     window = parent
-                except:
+                except (COMError, OSError):
                     break
             
             return self._build_element_tree(window, max_depth)
@@ -307,13 +307,13 @@ class UIAutomationWrapper:
                         try:
                             child_element = self._build_element_tree(child, max_depth, current_depth + 1)
                             ui_element.children.append(child_element)
-                        except:
+                        except (COMError, OSError, Exception):
                             pass
                         try:
                             child = walker.GetNextSiblingElement(child)
-                        except:
+                        except (COMError, OSError):
                             break
-                except:
+                except (COMError, OSError):
                     pass
             
             return ui_element
@@ -325,14 +325,14 @@ class UIAutomationWrapper:
         """获取元素名称"""
         try:
             return element.CurrentName or ""
-        except:
+        except (COMError, OSError):
             return ""
     
     def _get_property(self, element: Any, property_id: int, default: Any = None) -> Any:
         """获取元素属性"""
         try:
             return element.GetCurrentPropertyValue(property_id)
-        except:
+        except (COMError, OSError):
             return default
     
     def _get_control_type_name(self, element: Any) -> str:
@@ -381,7 +381,7 @@ class UIAutomationWrapper:
                 50038: "Separator"
             }
             return control_type_names.get(control_type_id, f"Unknown({control_type_id})")
-        except:
+        except (COMError, OSError):
             return "Unknown"
     
     def _get_parent(self, element: Any) -> Optional[Any]:
@@ -389,7 +389,7 @@ class UIAutomationWrapper:
         try:
             walker = self.uia.ControlViewWalker
             return walker.GetParentElement(element)
-        except:
+        except (COMError, OSError):
             return None
 
 

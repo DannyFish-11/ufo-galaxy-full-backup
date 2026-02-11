@@ -139,7 +139,7 @@ def create_icon():
         # 添加文字
         try:
             font = ImageFont.truetype("arial.ttf", 80)
-        except:
+        except (IOError, OSError):
             font = ImageFont.load_default()
             
         draw.text((size // 2, size // 2), "UFO", fill=(255, 255, 255, 255), 

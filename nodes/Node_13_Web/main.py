@@ -180,7 +180,7 @@ class WebService:
                 if "application/json" in content_type:
                     try:
                         body = response.json()
-                    except:
+                    except (json.JSONDecodeError, ValueError):
                         body = response.text
                 else:
                     body = response.text
@@ -409,9 +409,9 @@ class WebService:
                 
                 try:
                     body = response.json()
-                except:
+                except (json.JSONDecodeError, ValueError):
                     body = response.text
-                
+
                 return {
                     "success": response.is_success,
                     "status_code": response.status_code,

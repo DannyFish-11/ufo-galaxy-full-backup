@@ -175,7 +175,7 @@ class AnomalyDetector:
             import socket
             socket.create_connection(("8.8.8.8", 53), timeout=3)
             return True
-        except:
+        except OSError:
             return False
 
     def detect_anomalies(self, metrics: HealthMetrics) -> Tuple[HealthStatus, List[IssueType]]:

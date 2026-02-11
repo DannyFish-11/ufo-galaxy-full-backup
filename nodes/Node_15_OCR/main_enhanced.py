@@ -441,7 +441,7 @@ async def list_languages() -> Dict[str, Any]:
     if pytesseract:
         try:
             languages["tesseract"] = pytesseract.get_languages()
-        except:
+        except Exception:
             pass
     
     return {

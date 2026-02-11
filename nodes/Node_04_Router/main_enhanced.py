@@ -245,7 +245,7 @@ class ToolRegistry:
                     timeout=5
                 )
                 return result.returncode == 0
-            except:
+            except Exception:
                 return False
         else:
             # 其他平台检查文件路径
@@ -338,7 +338,7 @@ class ToolRegistry:
                     # 尝试解析 JSON
                     try:
                         return json.loads(content)
-                    except:
+                    except (json.JSONDecodeError, ValueError):
                         # 如果不是纯 JSON，尝试提取
                         import re
                         json_match = re.search(r'\{.*\}', content, re.DOTALL)

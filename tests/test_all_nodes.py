@@ -202,7 +202,7 @@ class NodeTester:
             try:
                 process.terminate()
                 process.wait(timeout=3)
-            except:
+            except Exception:
                 process.kill()
         self.processes.clear()
 

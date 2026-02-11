@@ -117,7 +117,7 @@ async def health():
             response = await client.get(f"{NODE_90_VISION_URL}/health")
             if response.status_code == 200:
                 node_90_status = "healthy"
-    except:
+    except Exception:
         node_90_status = "unhealthy"
     
     try:
@@ -125,7 +125,7 @@ async def health():
             response = await client.get(f"{NODE_91_AGENT_URL}/health")
             if response.status_code == 200:
                 node_91_status = "healthy"
-    except:
+    except Exception:
         node_91_status = "unhealthy"
     
     try:
@@ -133,7 +133,7 @@ async def health():
             response = await client.get(f"{NODE_92_CONTROL_URL}/health")
             if response.status_code == 200:
                 node_92_status = "healthy"
-    except:
+    except Exception:
         node_92_status = "unhealthy"
     
     return {

@@ -395,7 +395,7 @@ class PerformanceAnalyzer:
                     complexity += len(node.values) - 1
             
             return complexity
-        except:
+        except Exception:
             return 0
     
     def _find_bottlenecks(self, code: str) -> List[str]:
@@ -415,8 +415,8 @@ class PerformanceAnalyzer:
             
             # 检查大量的字符串拼接
             # （简化版，实际需要更复杂的分析）
-            
-        except:
+
+        except Exception:
             pass
         
         return bottlenecks

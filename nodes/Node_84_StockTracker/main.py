@@ -290,9 +290,9 @@ class StockTrackerService:
             try:
                 quote = await self.get_quote(symbol)
                 quotes.append(quote)
-            except:
+            except Exception:
                 pass
-        
+
         # 排序
         gainers = sorted(quotes, key=lambda x: x.change_percent, reverse=True)[:5]
         losers = sorted(quotes, key=lambda x: x.change_percent)[:5]
@@ -440,9 +440,9 @@ async def get_watchlist(name: str):
         try:
             quote = await tracker.get_quote(symbol)
             quotes.append(quote.dict())
-        except:
+        except Exception:
             pass
-    
+
     return {
         "watchlist": watchlist.dict(),
         "quotes": quotes

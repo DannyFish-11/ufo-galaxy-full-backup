@@ -333,7 +333,7 @@ class OpenCodeEngine:
             if result.returncode == 0:
                 self.is_installed = True
                 self.opencode_path = result.stdout.strip()
-        except:
+        except Exception:
             self.is_installed = False
     
     def _build_command(

@@ -273,7 +273,7 @@ class NodeManager:
             try:
                 process.terminate()
                 process.wait(timeout=5)
-            except:
+            except (subprocess.TimeoutExpired, OSError):
                 process.kill()
         self.running_nodes.clear()
         

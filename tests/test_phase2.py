@@ -138,7 +138,7 @@ class SimulatedSymbolicMath:
                 "verified": abs(result - expected_val) < 0.0001,
                 "computed_value": result
             }
-        except:
+        except Exception:
             return {
                 "expression": expression,
                 "expected": expected,

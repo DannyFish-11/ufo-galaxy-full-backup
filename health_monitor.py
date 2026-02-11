@@ -126,7 +126,14 @@ class HealthMonitor:
         # 如果连续 3 次不健康，尝试重启
         if self.alert_count[node_id] >= 3:
             print(f"🔄 尝试重启节点 {status['name']}...")
-            # TODO: 实现自动重启
+            try:
+                restart_result = await self.manager.restart_node(node_id)
+                if restart_result:
+                    print(f"✅ 节点 {status['name']} 重启成功")
+                else:
+                    print(f"❌ 节点 {status['name']} 重启失败")
+            except Exception as e:
+                print(f"❌ 节点 {status['name']} 重启异常: {e}")
             self.alert_count[node_id] = 0
     
     def get_summary(self) -> Dict:
@@ -347,11 +354,13 @@ async def get_history(node_id: str):
 # 启动服务
 # =============================================================================
 
+@app.on_event("startup")
+async def startup_event():
+    """启动时开始监控循环"""
+    asyncio.create_task(monitor.monitor_loop())
+
 if __name__ == "__main__":
     import uvicorn
-    
-    # 启动监控循环
-    asyncio.create_task(monitor.monitor_loop())
-    
-    # 启动 Web 服务
+
+    # 启动 Web 服务（监控循环通过 startup 事件自动启动）
     uvicorn.run(app, host="0.0.0.0", port=9000)

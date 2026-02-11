@@ -13,6 +13,7 @@ UFO³ Galaxy - P2P 连接器
 """
 
 import asyncio
+import logging
 import socket as sock_module
 import struct
 import json
@@ -21,6 +22,8 @@ from typing import Dict, List, Any, Optional, Tuple
 from dataclasses import dataclass, field
 from enum import Enum
 import aiohttp
+
+logger = logging.getLogger(__name__)
 
 # ============================================================================
 # 配置
@@ -416,9 +419,9 @@ class P2PConnector:
                 public_ip=handshake.get("public_ip"),
                 public_port=handshake.get("public_port")
             )
-        except:
+        except Exception:
             return None
-    
+
     async def _receive_loop(self, conn: P2PConnection):
         """接收循环"""
         try:
@@ -481,7 +484,7 @@ class P2PConnector:
                         conn.writer.write(struct.pack('!I', len(heartbeat)))
                         conn.writer.write(heartbeat)
                         await conn.writer.drain()
-                    except:
+                    except Exception:
                         await self._close_connection(conn)
             
             except asyncio.CancelledError:

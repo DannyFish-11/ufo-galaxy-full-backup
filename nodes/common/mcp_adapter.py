@@ -118,7 +118,7 @@ class ExternalMCPAdapter(MCPAdapter):
             if result.returncode == 0:
                 self._tools_cache = json.loads(result.stdout)
                 return self._tools_cache
-        except:
+        except Exception:
             pass
             
         return []

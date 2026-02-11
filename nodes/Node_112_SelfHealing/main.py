@@ -227,7 +227,7 @@ class SelfHealingEngine:
                         return HealthStatus.DEGRADED
                     else:
                         return HealthStatus.UNHEALTHY
-        except:
+        except Exception:
             return HealthStatus.UNHEALTHY
     
     async def _tcp_check(self, check: HealthCheck) -> HealthStatus:
@@ -243,7 +243,7 @@ class SelfHealingEngine:
             writer.close()
             await writer.wait_closed()
             return HealthStatus.HEALTHY
-        except:
+        except (OSError, asyncio.TimeoutError):
             return HealthStatus.UNHEALTHY
     
     async def _process_check(self, check: HealthCheck) -> HealthStatus:
@@ -256,7 +256,7 @@ class SelfHealingEngine:
                 if process_name.lower() in proc.info['name'].lower():
                     return HealthStatus.HEALTHY
             return HealthStatus.UNHEALTHY
-        except:
+        except Exception:
             return HealthStatus.UNKNOWN
     
     async def _resource_check(self, check: HealthCheck) -> HealthStatus:
@@ -277,7 +277,7 @@ class SelfHealingEngine:
             elif cpu > cpu_threshold * 0.8 or mem > mem_threshold * 0.8:
                 return HealthStatus.DEGRADED
             return HealthStatus.HEALTHY
-        except:
+        except Exception:
             return HealthStatus.UNKNOWN
     
     async def _detect_fault(self, check: HealthCheck):

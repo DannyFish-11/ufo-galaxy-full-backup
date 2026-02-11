@@ -302,7 +302,7 @@ class ADBController:
             # Clean up temp file
             try:
                 os.unlink(temp_path)
-            except:
+            except OSError:
                 pass
     
     async def _input_text(self, device: str, params: Dict) -> Dict:

@@ -216,7 +216,7 @@ class AcademicMemoryManager:
                 if line.startswith("- **ID**:"):
                     return line.split("`")[1]
             return None
-        except:
+        except Exception:
             return None
     
     async def get_papers_by_tag(self, tag: str) -> List[Dict]:

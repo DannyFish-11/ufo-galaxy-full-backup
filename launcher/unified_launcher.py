@@ -154,7 +154,7 @@ class UnifiedLauncher:
         try:
             loop = asyncio.get_event_loop()
             loop.create_task(self.stop())
-        except:
+        except RuntimeError:
             pass
     
     async def start(self, launch_config: LaunchConfig) -> Dict[str, Any]:
@@ -271,7 +271,7 @@ class UnifiedLauncher:
             stop_order = list(reversed(
                 self.resolver.resolve_startup_order(running_nodes)
             ))
-        except:
+        except Exception:
             stop_order = running_nodes
         
         results = {"stopped": [], "failed": []}
@@ -467,7 +467,7 @@ class UnifiedLauncher:
                     runtime.config.health_check_url
                 )
                 return response.status_code == 200
-            except:
+            except Exception:
                 return False
         
         return True

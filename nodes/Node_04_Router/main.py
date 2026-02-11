@@ -224,7 +224,7 @@ class GlobalRouter:
                     node.last_heartbeat = datetime.now()
                 else:
                     node.status = NodeStatus.DEGRADED
-        except:
+        except Exception:
             node.status = NodeStatus.UNHEALTHY
             
         return node.status

@@ -531,7 +531,7 @@ async def health():
             response = await client.get(f"{NODE_15_OCR_URL}/health")
             if response.status_code == 200:
                 node_15_status = "healthy"
-    except:
+    except Exception:
         node_15_status = "unhealthy"
     
     try:
@@ -539,7 +539,7 @@ async def health():
             response = await client.get(f"{NODE_45_DESKTOP_URL}/health")
             if response.status_code == 200:
                 node_45_status = "healthy"
-    except:
+    except Exception:
         node_45_status = "unhealthy"
     
     return {

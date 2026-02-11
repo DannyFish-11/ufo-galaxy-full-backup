@@ -143,7 +143,7 @@ def test_code_statistics():
         try:
             with open(file, 'r', encoding='utf-8') as f:
                 total_lines += len(f.readlines())
-        except:
+        except Exception:
             pass
     
     print(f"✅ Python 文件数: {len(py_files)}")

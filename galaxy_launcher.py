@@ -177,11 +177,12 @@ class NodeManager:
             env["NODE_NAME"] = config["name"]
             env["PORT"] = str(config["port"])
             
+            log_handle = open(log_file, "w")
             process = subprocess.Popen(
                 [sys.executable, str(main_file)],
                 cwd=str(node_dir),
                 env=env,
-                stdout=open(log_file, "w"),
+                stdout=log_handle,
                 stderr=subprocess.STDOUT,
                 start_new_session=True
             )
@@ -205,9 +206,9 @@ class NodeManager:
         try:
             response = await self.http_client.get(f"http://localhost:{config['port']}/health")
             return response.status_code == 200
-        except:
+        except Exception:
             return False
-    
+
     async def wait_for_node(self, node_id: str, timeout: int = 10) -> bool:
         """等待节点启动"""
         start_time = time.time()

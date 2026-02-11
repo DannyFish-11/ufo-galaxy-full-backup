@@ -130,7 +130,7 @@ class OpenCodeEngine:
                 )
                 if result.returncode == 0:
                     runtime.version = result.stdout.strip().split('\n')[0]
-            except:
+            except Exception:
                 pass
     
     def create_sandbox(self) -> str:
@@ -156,9 +156,9 @@ class OpenCodeEngine:
         
         try:
             shutil.rmtree(sandbox.working_dir, ignore_errors=True)
-        except:
+        except OSError:
             pass
-        
+
         sandbox.is_active = False
         del self.sandboxes[sandbox_id]
         logger.info(f"Destroyed sandbox: {sandbox_id}")
@@ -278,7 +278,7 @@ class OpenCodeEngine:
             if not sandbox_id:
                 try:
                     shutil.rmtree(working_dir, ignore_errors=True)
-                except:
+                except OSError:
                     pass
         
         return execution

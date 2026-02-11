@@ -56,7 +56,7 @@ async def disconnect(connection_id: str):
             connections[connection_id].close()
             del connections[connection_id]
             return {"success": True}
-        except:
+        except Exception:
             pass
     return {"success": False, "error": "Connection not found"}
 

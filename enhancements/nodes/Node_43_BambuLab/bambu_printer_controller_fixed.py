@@ -335,7 +335,7 @@ class BambuLabDriver(PrinterDriver):
         if self._client:
             try:
                 self._client.disconnect()
-            except:
+            except Exception:
                 pass
         
         if hasattr(self, '_mqtt_client'):

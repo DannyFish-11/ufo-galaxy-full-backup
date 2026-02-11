@@ -66,7 +66,7 @@ async def get_status():
             try:
                 data = json.loads(msg.payload.decode())
                 status.update(data)
-            except:
+            except (json.JSONDecodeError, ValueError):
                 pass
             c.disconnect()
         

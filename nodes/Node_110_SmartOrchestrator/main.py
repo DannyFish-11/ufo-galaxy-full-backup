@@ -381,7 +381,7 @@ class SmartOrchestrator:
         """评估条件"""
         try:
             return eval(condition, {"__builtins__": {}}, context)
-        except:
+        except Exception:
             return True
     
     async def start(self):

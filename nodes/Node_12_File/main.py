@@ -413,7 +413,7 @@ class FileService:
                         content = item.read_text(errors='ignore')
                         if request.content_pattern not in content:
                             continue
-                    except:
+                    except OSError:
                         continue
                 
                 info = await self.get_file_info(str(item))

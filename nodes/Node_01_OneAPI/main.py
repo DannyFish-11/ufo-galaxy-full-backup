@@ -355,7 +355,7 @@ async def health():
             resp = requests.get(f"{LOCAL_LLM_URL}/health", timeout=2)
             if resp.status_code == 200:
                 providers.append("local")
-        except:
+        except Exception:
             pass
     
     # 检查云端提供商
@@ -400,7 +400,7 @@ async def list_models():
                         "cost": 0,
                         "priority": LOCAL_LLM_PRIORITY
                     })
-        except:
+        except Exception:
             pass
     
     # 云端模型

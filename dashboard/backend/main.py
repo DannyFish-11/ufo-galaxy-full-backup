@@ -180,7 +180,7 @@ class DashboardService:
         """获取记忆系统统计"""
         try:
             return await self.call_node_api("80", "/stats")
-        except:
+        except Exception:
             return {"error": "Memory system unavailable"}
     
     async def get_logs(self, limit: int = 100) -> List[Dict[str, Any]]:
@@ -188,7 +188,7 @@ class DashboardService:
         try:
             response = await self.call_node_api("65", f"/logs?limit={limit}")
             return response.get("logs", [])
-        except:
+        except Exception:
             return []
     
     async def broadcast_update(self, message: Dict[str, Any]):
@@ -198,7 +198,7 @@ class DashboardService:
         for client in self.websocket_clients:
             try:
                 await client.send_json(message)
-            except:
+            except Exception:
                 disconnected.append(client)
         
         # 移除断开的客户端
@@ -299,7 +299,7 @@ async def restart_node(node_id: str):
             method="POST"
         )
         return result
-    except:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to restart node")
 
 @app.get("/api/memory/stats")
@@ -313,7 +313,7 @@ async def get_conversations():
     """获取对话历史"""
     try:
         return await dashboard.call_node_api("80", "/conversations")
-    except:
+    except Exception:
         return {"conversations": []}
 
 @app.get("/api/logs")
@@ -333,7 +333,7 @@ async def create_task(task: TaskRequest):
             data=task.dict()
         )
         return result
-    except:
+    except Exception:
         raise HTTPException(status_code=500, detail="Failed to create task")
 
 @app.get("/api/tasks")
@@ -341,7 +341,7 @@ async def get_tasks():
     """获取任务列表"""
     try:
         return await dashboard.call_node_api("81", "/tasks")
-    except:
+    except Exception:
         return {"tasks": []}
 
 @app.get("/api/prompts")
@@ -349,7 +349,7 @@ async def get_prompts():
     """获取提示词库"""
     try:
         return await dashboard.call_node_api("85", "/prompts")
-    except:
+    except Exception:
         return {"prompts": []}
 
 @app.websocket("/ws")

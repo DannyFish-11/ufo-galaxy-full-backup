@@ -295,7 +295,7 @@ async def health():
             client = NodeClient(url)
             result = await client.get("/health")
             services_status[name] = result.get("status") == "healthy"
-        except:
+        except Exception:
             services_status[name] = False
     
     return {

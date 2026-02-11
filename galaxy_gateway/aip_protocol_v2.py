@@ -1259,7 +1259,7 @@ class MessageCodec:
                 if isinstance(data, str) and message.payload.data_type in ["image", "gui_screenshot"]:
                     try:
                         data = base64.b64decode(data)
-                    except:
+                    except Exception:
                         return False, "invalid base64 data"
                 
                 calculated_checksum = MessageBuilder._calculate_checksum(data)

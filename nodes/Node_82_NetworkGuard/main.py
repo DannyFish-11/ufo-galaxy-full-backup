@@ -172,7 +172,7 @@ class NetworkGuardService:
             result = sock.connect_ex((host, port))
             sock.close()
             return result == 0
-        except:
+        except OSError:
             return False
     
     def scan_ports(self, host: str, ports: List[int]) -> List[PortScanResult]:
@@ -203,7 +203,7 @@ class NetworkGuardService:
         try:
             socket.create_connection(("8.8.8.8", 53), timeout=3)
             return True
-        except:
+        except OSError:
             return False
     
     def get_public_ip(self) -> Optional[str]:
@@ -212,7 +212,7 @@ class NetworkGuardService:
             import httpx
             response = httpx.get("https://api.ipify.org", timeout=5)
             return response.text
-        except:
+        except Exception:
             return None
     
     def get_tailscale_status(self) -> Dict[str, Any]:

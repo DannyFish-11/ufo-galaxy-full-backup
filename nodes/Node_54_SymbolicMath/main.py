@@ -193,7 +193,7 @@ class SymbolicEngine:
             allowed_names = {"abs": abs, "min": min, "max": max}
             result = eval(expr, {"__builtins__": {}}, allowed_names)
             return float(result)
-        except:
+        except Exception:
             return None
     
     def check_equality(self, lhs: str, rhs: str) -> Tuple[bool, float]:

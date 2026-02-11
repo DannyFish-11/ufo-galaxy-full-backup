@@ -100,7 +100,7 @@ async def wait_for_health(url: str, timeout: int = 10) -> bool:
                 response = await client.get(f"{url}/health", timeout=2.0)
                 if response.status_code == 200:
                     return True
-            except:
+            except Exception:
                 pass
             await asyncio.sleep(0.5)
     return False

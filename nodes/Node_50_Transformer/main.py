@@ -105,7 +105,7 @@ def parse_json_response(result: str) -> Dict:
         else:
             json_str = result
         return json.loads(json_str.strip())
-    except:
+    except (json.JSONDecodeError, ValueError):
         return None
 
 # ============ NLU 功能 ============
