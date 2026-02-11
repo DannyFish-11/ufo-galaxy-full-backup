@@ -152,6 +152,21 @@ class SystemManager:
         self.processes: Dict[str, subprocess.Popen] = {}
         self.node_status: Dict[str, str] = {}
         self.nodes_config = self._flatten_nodes()
+        
+        # ===== 集成：初始化能力管理器和连接管理器 =====
+        try:
+            sys.path.insert(0, str(self.project_root))
+            from core.capability_manager import get_capability_manager
+            from core.connection_manager import get_connection_manager
+            
+            self.capability_manager = get_capability_manager()
+            self.connection_manager = get_connection_manager()
+            
+            print(f"{GREEN}✅ 能力管理器和连接管理器已初始化{RESET}")
+        except Exception as e:
+            print(f"{YELLOW}⚠️  能力管理器初始化失败 (非致命): {e}{RESET}")
+            self.capability_manager = None
+            self.connection_manager = None
     
     def _flatten_nodes(self) -> Dict[str, NodeConfig]:
         """将分组节点展平为字典"""
@@ -212,6 +227,20 @@ class SystemManager:
             self.processes[config.id] = process
             self.node_status[config.id] = "starting"
             
+            # ===== 集成：注册连接到连接管理器 =====
+            if self.connection_manager:
+                try:
+                    asyncio.create_task(self._register_node_connection(config))
+                except Exception as e:
+                    print(f"{YELLOW}⚠️  连接注册失败 (非致命): {e}{RESET}")
+            
+            # ===== 集成：注册节点能力 =====
+            if self.capability_manager:
+                try:
+                    asyncio.create_task(self._register_node_capabilities(config))
+                except Exception as e:
+                    print(f"{YELLOW}⚠️  能力注册失败 (非致命): {e}{RESET}")
+            
             print(f"{CYAN}🚀 启动节点 {config.name} (端口 {config.port})...{RESET}")
             return True
             
@@ -219,6 +248,67 @@ class SystemManager:
             print(f"{RED}❌ 启动节点 {config.name} 失败: {e}{RESET}")
             self.node_status[config.id] = "failed"
             return False
+    
+    async def _register_node_connection(self, config: NodeConfig):
+        """注册节点到连接管理器"""
+        if not self.connection_manager:
+            return
+        
+        try:
+            from core.connection_manager import ConnectionConfig
+            
+            # 等待节点启动
+            await asyncio.sleep(2)
+            
+            connection_id = f"node_{config.id}"
+            url = f"http://localhost:{config.port}"
+            
+            conn_config = ConnectionConfig(
+                url=url,
+                timeout=5.0,
+                heartbeat_interval=30.0,
+                health_check_path=config.health_check_path
+            )
+            
+            await self.connection_manager.register_connection(
+                connection_id, url, conn_config
+            )
+            
+            # 尝试建立连接
+            await self.connection_manager.connect(connection_id)
+            
+        except Exception as e:
+            print(f"{YELLOW}⚠️  节点连接注册失败 {config.name}: {e}{RESET}")
+    
+    async def _register_node_capabilities(self, config: NodeConfig):
+        """从 node_dependencies.json 读取并注册节点能力"""
+        if not self.capability_manager:
+            return
+        
+        try:
+            # 尝试从配置文件读取能力
+            config_file = self.project_root / "node_dependencies.json"
+            if config_file.exists():
+                with open(config_file, 'r', encoding='utf-8') as f:
+                    deps_config = json.load(f)
+                
+                # 查找节点配置
+                node_key = f"Node_{config.id}_{config.name}"
+                if node_key in deps_config.get("nodes", {}):
+                    node_info = deps_config["nodes"][node_key]
+                    capabilities = node_info.get("capabilities", [])
+                    
+                    # 注册每个能力
+                    for cap_name in capabilities:
+                        await self.capability_manager.register_capability(
+                            name=f"{config.name.lower()}_{cap_name}",
+                            description=node_info.get("description", f"Capability {cap_name}"),
+                            node_id=config.id,
+                            node_name=config.name,
+                            category=node_info.get("group", "general")
+                        )
+        except Exception as e:
+            print(f"{YELLOW}⚠️  能力注册失败 {config.name}: {e}{RESET}")
     
     async def check_node_health(self, config: NodeConfig, timeout: int = 5) -> bool:
         """检查节点健康状态"""

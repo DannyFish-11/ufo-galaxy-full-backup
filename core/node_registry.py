@@ -30,6 +30,15 @@ from abc import ABC, abstractmethod
 
 logger = logging.getLogger("NodeRegistry")
 
+# 延迟导入以避免循环依赖
+def _get_capability_manager():
+    from .capability_manager import get_capability_manager, CapabilityStatus
+    return get_capability_manager(), CapabilityStatus
+
+def _get_connection_manager():
+    from .connection_manager import get_connection_manager
+    return get_connection_manager()
+
 
 # ============================================================================
 # 节点状态和类型定义
@@ -218,6 +227,23 @@ class NodeRegistry:
             self.category_index[category].add(node_id)
             
             node.metadata.status = NodeStatus.REGISTERED
+            
+            # ===== 集成：注册能力到能力管理器 =====
+            try:
+                capability_manager, CapabilityStatus = _get_capability_manager()
+                for cap in node.metadata.capabilities:
+                    await capability_manager.register_capability(
+                        name=cap.name,
+                        description=cap.description,
+                        node_id=node_id,
+                        node_name=node.name,
+                        category=node.metadata.category.value,
+                        input_schema=cap.input_schema,
+                        output_schema=cap.output_schema
+                    )
+            except Exception as e:
+                logger.warning(f"能力注册失败 (非致命): {e}")
+            
             logger.info(f"节点已注册: {node_id} ({node.name})")
             return True
             
@@ -351,14 +377,39 @@ class NodeRegistry:
             node.metadata.last_health_check = datetime.now()
             node.metadata.health_score = result.get("score", 1.0)
             node.metadata.error_message = None
+            
+            # ===== 集成：更新能力状态 =====
+            try:
+                capability_manager, CapabilityStatus = _get_capability_manager()
+                status = CapabilityStatus.ONLINE if result.get("score", 0) > 0.5 else CapabilityStatus.ERROR
+                await capability_manager.update_node_status(node_id, status)
+            except Exception as e:
+                logger.debug(f"能力状态更新失败 (非致命): {e}")
+            
             return {"healthy": True, **result}
         except asyncio.TimeoutError:
             node.metadata.health_score = 0.0
             node.metadata.error_message = "健康检查超时"
+            
+            # ===== 集成：标记能力离线 =====
+            try:
+                capability_manager, CapabilityStatus = _get_capability_manager()
+                await capability_manager.update_node_status(node_id, CapabilityStatus.OFFLINE)
+            except Exception as e:
+                logger.debug(f"能力状态更新失败 (非致命): {e}")
+            
             return {"healthy": False, "error": "超时"}
         except Exception as e:
             node.metadata.health_score = 0.0
             node.metadata.error_message = str(e)
+            
+            # ===== 集成：标记能力错误 =====
+            try:
+                capability_manager, CapabilityStatus = _get_capability_manager()
+                await capability_manager.update_node_status(node_id, CapabilityStatus.ERROR)
+            except Exception as e:
+                logger.debug(f"能力状态更新失败 (非致命): {e}")
+            
             return {"healthy": False, "error": str(e)}
             
     async def check_all_health(self) -> Dict[str, Dict[str, Any]]:
