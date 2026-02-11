@@ -77,7 +77,7 @@ ALL_NODES = [
     NodeInfo("20", "Qdrant", 8020, "L2_Tools"),
     NodeInfo("21", "Notion", 8021, "L2_Tools"),
     NodeInfo("22", "BraveSearch", 8022, "L2_Tools"),
-    NodeInfo("23", "Time", 8023, "L2_Tools"),
+    NodeInfo("23", "Time", 8123, "L2_Tools"),
     NodeInfo("24", "Weather", 8024, "L2_Tools"),
     NodeInfo("25", "GoogleSearch", 8025, "L2_Tools"),
     NodeInfo("26", "Reserved", 8026, "L2_Tools"),

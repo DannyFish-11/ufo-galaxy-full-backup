@@ -65,7 +65,7 @@ NODE_CONFIG = {
     "20": {"name": "S3", "group": NodeGroup.OPTIONAL, "port": 8020, "deps": []},
     "21": {"name": "Notion", "group": NodeGroup.OPTIONAL, "port": 8021, "deps": []},
     "22": {"name": "BraveSearch", "group": NodeGroup.EXTENDED, "port": 8022, "deps": []},
-    "23": {"name": "Time", "group": NodeGroup.EXTENDED, "port": 8023, "deps": []},
+    "23": {"name": "Time", "group": NodeGroup.EXTENDED, "port": 8123, "deps": []},
     "24": {"name": "Weather", "group": NodeGroup.EXTENDED, "port": 8024, "deps": []},
     "25": {"name": "GoogleSearch", "group": NodeGroup.OPTIONAL, "port": 8025, "deps": []},
     

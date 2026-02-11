@@ -1,18 +1,25 @@
+#!/usr/bin/env python3
 """
-UFO³ Galaxy 系统管理器
-======================
+UFO³ Galaxy 系统管理器 v2.0 (修复版)
+=================================
+
+修复内容:
+- 使用 unified_config.json 统一配置
+- 完整支持所有102个节点
+- 端口配置与统一端口分配对齐
 
 统一管理所有节点的启动、停止、监控和健康检查
 
 功能：
 1. 一键启动/停止所有节点
-2. 分组管理（核心/学术/开发/全部）
+2. 分组管理（9个分组）
 3. 实时监控节点状态
 4. 自动重启失败的节点
 5. 生成系统报告
 
-作者：Manus AI
-日期：2026-01-23
+作者: Manus AI
+版本: 2.0
+日期: 2026-01-23
 """
 
 import os
@@ -27,6 +34,7 @@ from typing import Dict, List, Set, Optional
 from pathlib import Path
 from datetime import datetime
 from dataclasses import dataclass, asdict
+from enum import Enum
 
 # ANSI 颜色代码
 GREEN = "\033[92m"
@@ -37,7 +45,7 @@ CYAN = "\033[96m"
 RESET = "\033[0m"
 
 # =============================================================================
-# 配置
+# Configuration - 从 unified_config.json 加载
 # =============================================================================
 
 @dataclass
@@ -49,43 +57,87 @@ class NodeConfig:
     group: str
     auto_start: bool = True
     health_check_path: str = "/health"
+    dependencies: List[str] = None
+    critical: bool = False
+    description: str = ""
     
-# 节点配置表
-NODES = {
-    # 核心节点
-    "core": [
-        NodeConfig("00", "StateMachine", 8000, "core"),
-        NodeConfig("01", "OneAPI", 8001, "core"),
-        NodeConfig("02", "Tasker", 8002, "core"),
-        NodeConfig("03", "Router", 8003, "core"),
-        NodeConfig("05", "Auth", 8005, "core"),
-        NodeConfig("06", "Filesystem", 8006, "core"),
-    ],
-    # 学术研究节点
-    "academic": [
-        NodeConfig("97", "AcademicSearch", 8097, "academic"),
-        NodeConfig("104", "AgentCPM", 8104, "academic"),
-        NodeConfig("105", "UnifiedKnowledgeBase", 8105, "academic"),
-    ],
-    # 开发工作流节点
-    "development": [
-        NodeConfig("07", "Git", 8007, "development"),
-        NodeConfig("11", "GitHub", 8011, "development"),
-        NodeConfig("106", "GitHubFlow", 8106, "development"),
-    ],
-    # 扩展节点
-    "extended": [
-        NodeConfig("04", "Email", 8004, "extended"),
-        NodeConfig("08", "Browser", 8008, "extended"),
-        NodeConfig("09", "Scheduler", 8009, "extended"),
-        NodeConfig("10", "Logger", 8010, "extended"),
-        NodeConfig("80", "MemorySystem", 8080, "extended"),
-        NodeConfig("96", "SmartTransportRouter", 8096, "extended"),
-    ],
-}
+    def __post_init__(self):
+        if self.dependencies is None:
+            self.dependencies = []
+
+class ConfigManager:
+    """配置管理器"""
+    
+    CONFIG_FILE = Path(__file__).parent / "config" / "unified_config.json"
+    
+    @classmethod
+    def load_nodes(cls) -> Dict[str, List[NodeConfig]]:
+        """从配置文件加载节点"""
+        if not cls.CONFIG_FILE.exists():
+            print(f"{YELLOW}⚠️  Config file not found, using defaults{RESET}")
+            return cls._get_default_nodes()
+        
+        try:
+            with open(cls.CONFIG_FILE, 'r', encoding='utf-8') as f:
+                config = json.load(f)
+            
+            nodes_by_group = {}
+            
+            for node_key, node_info in config.get("nodes", {}).items():
+                # 解析节点ID
+                parts = node_key.split('_')
+                if len(parts) >= 3:
+                    node_id = '_'.join(parts[1:-1]) if len(parts) > 3 else parts[1]
+                    node_name = parts[-1]
+                else:
+                    continue
+                
+                group = node_info.get("group", "core")
+                
+                if group not in nodes_by_group:
+                    nodes_by_group[group] = []
+                
+                nodes_by_group[group].append(NodeConfig(
+                    id=node_id,
+                    name=node_name,
+                    port=node_info["port"],
+                    group=group,
+                    auto_start=node_info.get("critical", False),
+                    dependencies=node_info.get("dependencies", []),
+                    critical=node_info.get("critical", False),
+                    description=node_info.get("description", "")
+                ))
+            
+            return nodes_by_group
+            
+        except Exception as e:
+            print(f"{RED}❌ Error loading config: {e}{RESET}")
+            return cls._get_default_nodes()
+    
+    @classmethod
+    def _get_default_nodes(cls) -> Dict[str, List[NodeConfig]]:
+        """默认节点配置"""
+        return {
+            "core": [
+                NodeConfig("00", "StateMachine", 8000, "core", True, critical=True),
+                NodeConfig("01", "OneAPI", 8001, "core", True, critical=True),
+                NodeConfig("02", "Tasker", 8002, "core", True, critical=True),
+                NodeConfig("03", "SecretVault", 8003, "core", True, critical=True),
+                NodeConfig("04", "Router", 8004, "core", True, critical=True),
+                NodeConfig("05", "Auth", 8005, "core", True, critical=True),
+                NodeConfig("06", "Filesystem", 8006, "core", True, critical=True),
+            ],
+            "monitoring": [
+                NodeConfig("65", "LoggerCentral", 8064, "monitoring", True, critical=True),
+                NodeConfig("67", "HealthMonitor", 8066, "monitoring", True, critical=True),
+            ]
+        }
+
+# 加载节点配置
+NODES = ConfigManager.load_nodes()
 
 # =============================================================================
-# 系统管理器
+# System Manager
 # =============================================================================
 
 class SystemManager:
@@ -99,10 +151,18 @@ class SystemManager:
         
         self.processes: Dict[str, subprocess.Popen] = {}
         self.node_status: Dict[str, str] = {}
-        
+        self.nodes_config = self._flatten_nodes()
+    
+    def _flatten_nodes(self) -> Dict[str, NodeConfig]:
+        """将分组节点展平为字典"""
+        result = {}
+        for group_nodes in NODES.values():
+            for config in group_nodes:
+                result[config.id] = config
+        return result
+    
     def get_node_path(self, node_id: str, node_name: str) -> Optional[Path]:
         """获取节点路径"""
-        # 尝试多种可能的路径格式
         possible_paths = [
             self.nodes_dir / f"Node_{node_id}_{node_name}",
             self.nodes_dir / f"Node_{node_id}",
@@ -135,12 +195,18 @@ class SystemManager:
         
         try:
             with open(log_file, "w") as f:
+                env = os.environ.copy()
+                env["NODE_ID"] = config.id
+                env["NODE_NAME"] = config.name
+                env["PORT"] = str(config.port)
+                
                 process = subprocess.Popen(
                     [sys.executable, str(main_py)],
                     cwd=str(node_path),
                     stdout=f,
                     stderr=subprocess.STDOUT,
-                    text=True
+                    text=True,
+                    env=env
                 )
             
             self.processes[config.id] = process
@@ -196,6 +262,13 @@ class SystemManager:
         # 启动所有节点
         for config in configs:
             if config.auto_start:
+                # 先启动依赖节点
+                for dep in config.dependencies:
+                    dep_id = dep.replace("Node_", "").split("_")[0]
+                    if dep_id in self.nodes_config and dep_id not in self.processes:
+                        self.start_node(self.nodes_config[dep_id])
+                        await asyncio.sleep(1)
+                
                 self.start_node(config)
                 await asyncio.sleep(2)  # 等待 2 秒再启动下一个
         
@@ -222,7 +295,11 @@ class SystemManager:
     async def start_all(self, groups: List[str] = None):
         """启动所有节点"""
         if groups is None:
-            groups = ["core", "academic", "development", "extended"]
+            # 按优先级排序启动
+            priority_order = ["core", "monitoring", "tools", "physical", 
+                            "intelligence", "advanced", "orchestration", 
+                            "multimodal", "academic"]
+            groups = [g for g in priority_order if g in NODES]
         
         print(f"\n{CYAN}{'='*80}{RESET}")
         print(f"{CYAN}UFO³ Galaxy 系统启动{RESET}")
@@ -237,14 +314,16 @@ class SystemManager:
             return
         
         process = self.processes[node_id]
+        config = self.nodes_config.get(node_id)
+        name = config.name if config else node_id
         
         try:
             process.terminate()
             process.wait(timeout=5)
-            print(f"{YELLOW}⏹️  节点 {node_id} 已停止{RESET}")
+            print(f"{YELLOW}⏹️  节点 {name} 已停止{RESET}")
         except subprocess.TimeoutExpired:
             process.kill()
-            print(f"{RED}🔪 节点 {node_id} 强制停止{RESET}")
+            print(f"{RED}🔪 节点 {name} 强制停止{RESET}")
         
         del self.processes[node_id]
         self.node_status[node_id] = "stopped"
@@ -279,26 +358,30 @@ class SystemManager:
         print(f"\n{BLUE}[{datetime.now().strftime('%Y-%m-%d %H:%M:%S')}] 节点状态检查{RESET}")
         print(f"{'-'*80}")
         
-        all_configs = []
-        for group in NODES.values():
-            all_configs.extend(group)
+        all_configs = list(self.nodes_config.values())
+        all_configs.sort(key=lambda x: x.port)
         
         tasks = [self.check_node_health(config, timeout=3) for config in all_configs]
         results = await asyncio.gather(*tasks)
         
         healthy_count = 0
         unhealthy_count = 0
+        not_running = 0
         
         for config, is_healthy in zip(all_configs, results):
-            if is_healthy:
-                print(f"{GREEN}✅ Node_{config.id:>3} {config.name:<25} (:{config.port}){RESET}")
-                healthy_count += 1
+            if config.id in self.processes:
+                if is_healthy:
+                    print(f"{GREEN}✅ Node_{config.id:>6} {config.name:<25} (:{config.port}){RESET}")
+                    healthy_count += 1
+                else:
+                    print(f"{RED}❌ Node_{config.id:>6} {config.name:<25} (:{config.port}) - Unhealthy{RESET}")
+                    unhealthy_count += 1
             else:
-                print(f"{RED}❌ Node_{config.id:>3} {config.name:<25} (:{config.port}){RESET}")
-                unhealthy_count += 1
+                print(f"{YELLOW}○ Node_{config.id:>6} {config.name:<25} (:{config.port}) - Not running{RESET}")
+                not_running += 1
         
         print(f"{'-'*80}")
-        print(f"{GREEN}健康: {healthy_count}{RESET} | {RED}不健康: {unhealthy_count}{RESET}")
+        print(f"{GREEN}健康: {healthy_count}{RESET} | {RED}不健康: {unhealthy_count}{RESET} | {YELLOW}未运行: {not_running}{RESET}")
     
     async def generate_report(self) -> Dict:
         """生成系统报告"""
@@ -307,31 +390,33 @@ class SystemManager:
             "nodes": {},
             "summary": {
                 "total": 0,
+                "running": 0,
                 "healthy": 0,
                 "unhealthy": 0,
                 "not_found": 0
             }
         }
         
-        all_configs = []
-        for group in NODES.values():
-            all_configs.extend(group)
+        all_configs = list(self.nodes_config.values())
         
         for config in all_configs:
             is_healthy = await self.check_node_health(config, timeout=3)
+            is_running = config.id in self.processes
             
             report["nodes"][config.id] = {
                 "name": config.name,
                 "port": config.port,
                 "group": config.group,
-                "status": "healthy" if is_healthy else "unhealthy"
+                "status": "healthy" if is_healthy else ("running" if is_running else "stopped")
             }
             
             report["summary"]["total"] += 1
             if is_healthy:
                 report["summary"]["healthy"] += 1
-            else:
+            elif is_running:
                 report["summary"]["unhealthy"] += 1
+            else:
+                report["summary"]["not_found"] += 1
         
         return report
 
@@ -343,10 +428,12 @@ async def main():
     """主函数"""
     import argparse
     
-    parser = argparse.ArgumentParser(description="UFO³ Galaxy 系统管理器")
+    parser = argparse.ArgumentParser(description="UFO³ Galaxy 系统管理器 v2.0")
     parser.add_argument("command", choices=["start", "stop", "status", "monitor", "report"],
                        help="命令")
-    parser.add_argument("--group", "-g", choices=["core", "academic", "development", "extended", "all"],
+    parser.add_argument("--group", "-g", 
+                       choices=["core", "tools", "physical", "intelligence", "monitoring",
+                               "advanced", "orchestration", "multimodal", "academic", "all"],
                        default="all", help="节点组")
     parser.add_argument("--interval", "-i", type=int, default=30,
                        help="监控间隔（秒）")
@@ -383,4 +470,10 @@ async def main():
         print(json.dumps(report, indent=2, ensure_ascii=False))
 
 if __name__ == "__main__":
+    print(f"""
+{CYAN}╔═══════════════════════════════════════════════════════════════╗
+║   UFO³ Galaxy System Manager v2.0                             ║
+║   102 Nodes | Unified Config | Port Conflict Fixed            ║
+╚═══════════════════════════════════════════════════════════════╝{RESET}
+""")
     asyncio.run(main())

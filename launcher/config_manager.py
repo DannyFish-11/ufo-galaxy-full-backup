@@ -132,7 +132,7 @@ class ConfigManager:
                            "Text-to-speech", [], 50),
             "22": NodeConfig("22", "BraveSearch", NodeGroup.EXTENDED, 8022,
                            "Brave search", [], 50),
-            "23": NodeConfig("23", "Time", NodeGroup.EXTENDED, 8023,
+            "23": NodeConfig("23", "Time", NodeGroup.EXTENDED, 8123,
                            "Time operations", [], 50),
             "24": NodeConfig("24", "Weather", NodeGroup.EXTENDED, 8024,
                            "Weather data", [], 50),

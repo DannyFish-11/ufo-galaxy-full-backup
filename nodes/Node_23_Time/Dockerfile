@@ -7,6 +7,6 @@ RUN pip install --no-cache-dir fastapi uvicorn httpx pytz
 
 COPY main.py .
 
-EXPOSE 8023
+EXPOSE 8123
 
 CMD ["python", "main.py"]
