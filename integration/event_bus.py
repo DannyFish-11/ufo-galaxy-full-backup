@@ -36,6 +36,21 @@ class EventType(Enum):
     STATE_TRANSITION = auto()             # 状态转换
     WAKEUP_SIGNAL = auto()                # 唤醒信号
     
+    # 命令路由事件
+    COMMAND_DISPATCHED = auto()           # 命令已分发
+    COMMAND_PROGRESS = auto()             # 命令执行进度
+    COMMAND_RESULT = auto()               # 命令执行结果
+    COMMAND_CANCELLED = auto()            # 命令已取消
+
+    # AI 意图事件
+    AI_INTENT_PARSED = auto()             # AI 意图已解析
+    AI_RECOMMENDATION = auto()            # AI 推荐生成
+
+    # 性能/监控事件
+    PERFORMANCE_ALERT = auto()            # 性能告警
+    CIRCUIT_BREAKER_OPEN = auto()         # 熔断器打开
+    CIRCUIT_BREAKER_CLOSE = auto()        # 熔断器关闭
+
     # UI状态 → 硬件触发 事件
     ANIMATION_STARTED = auto()            # 动画开始
     ANIMATION_COMPLETED = auto()          # 动画完成
