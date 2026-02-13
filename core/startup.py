@@ -10,6 +10,8 @@ UFO Galaxy - 系统启动引导
   3. 性能中间件（压缩、限流、缓存、计时）
   4. 命令路由引擎
   5. AI 意图引擎（解析器、记忆、推荐）
+  6. 向量数据库（Qdrant）
+  7. 事件桥接（EventBus ↔ 所有子系统）
 
 所有模块均支持优雅降级：缺少 Redis → 内存缓存，缺少 LLM → 规则引擎。
 """
@@ -70,7 +72,6 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
                 return {"status": "healthy", **info}
             monitoring.health.register_check("cache", _check_cache)
 
-        # 注册 Redis 连接检查
         if cache and cache.backend_type == "redis":
             monitoring.health.register_check("redis", lambda: {"status": "healthy", "type": "redis"})
 
@@ -95,24 +96,20 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         # 中间件按添加的逆序执行（最后添加的最先执行）
         # 执行顺序：Timer → RateLimit → Compress → Cache → Handler
 
-        # 3a. API 响应缓存（最接近 Handler）
         if cache:
             default_ttl = int(os.environ.get("REDIS_HTTP_CACHE_TTL", "30"))
             app.add_middleware(CachingMiddleware, cache_backend=cache, default_ttl=default_ttl)
             logger.info("API 缓存中间件已加载")
 
-        # 3b. 响应压缩
         min_size = int(os.environ.get("GZIP_MIN_SIZE", "1024"))
         app.add_middleware(ResponseCompressor, min_size=min_size)
         logger.info("gzip 压缩中间件已加载")
 
-        # 3c. 限流
         max_req = int(os.environ.get("RATE_LIMIT_MAX_REQUESTS", "200"))
         window = int(os.environ.get("RATE_LIMIT_WINDOW_SECONDS", "60"))
         app.add_middleware(RateLimitMiddleware, max_requests=max_req, window_seconds=window)
         logger.info(f"限流中间件已加载: {max_req} req / {window}s")
 
-        # 3d. 请求计时（最先执行）
         slow_threshold = float(os.environ.get("SLOW_REQUEST_THRESHOLD_MS", "500"))
         app.add_middleware(RequestTimerMiddleware, slow_threshold_ms=slow_threshold)
         logger.info("请求计时中间件已加载")
@@ -175,6 +172,32 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
             logger.info("Qdrant 不可用（语义搜索将使用本地模式）")
 
     # ====================================================================
+    # 7. 事件桥接（最后连接，因为它依赖上面所有子系统）
+    # ====================================================================
+    try:
+        from core.event_bridge import get_event_bridge
+
+        bridge = get_event_bridge()
+        await bridge.wire()
+        results["event_bridge"] = {"status": "ok"}
+        logger.info("事件桥接已建立")
+    except Exception as e:
+        results["event_bridge"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"事件桥接建立失败: {e}")
+
+    # ====================================================================
+    # 8. Galaxy Gateway 挂载（作为子应用）
+    # ====================================================================
+    try:
+        from galaxy_gateway.app import app as gateway_app
+        app.mount("/gateway", gateway_app)
+        results["galaxy_gateway"] = {"status": "ok"}
+        logger.info("Galaxy Gateway 已挂载到 /gateway")
+    except Exception as e:
+        results["galaxy_gateway"] = {"status": "not_available", "error": str(e)}
+        logger.info(f"Galaxy Gateway 未加载: {e}")
+
+    # ====================================================================
     # 汇总
     # ====================================================================
     ok_count = sum(1 for v in results.values() if v.get("status") == "ok")
@@ -182,3 +205,50 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     logger.info(f"子系统启动完成: {ok_count}/{total} 正常")
 
     return results
+
+
+async def shutdown_subsystems():
+    """
+    优雅关闭所有核心子系统
+
+    调用顺序与启动相反：事件桥 → AI → 命令路由 → 监控 → 缓存
+    """
+    logger.info("开始关闭核心子系统...")
+
+    # 1. 事件桥接
+    try:
+        from core.event_bridge import get_event_bridge
+        bridge = get_event_bridge()
+        await bridge.shutdown()
+        logger.info("事件桥接已关闭")
+    except Exception as e:
+        logger.warning(f"事件桥接关闭失败: {e}")
+
+    # 2. 命令路由清理
+    try:
+        from core.command_router import get_command_router
+        router = get_command_router()
+        await router.cleanup(max_age_seconds=0)
+        logger.info("命令路由已清理")
+    except Exception:
+        pass
+
+    # 3. 监控系统
+    try:
+        from core.monitoring import get_monitoring_manager
+        monitoring = get_monitoring_manager()
+        await monitoring.stop()
+        logger.info("监控系统已停止")
+    except Exception as e:
+        logger.warning(f"监控系统关闭失败: {e}")
+
+    # 4. 缓存
+    try:
+        from core.cache import _cache_instance
+        if _cache_instance:
+            await _cache_instance.close()
+            logger.info("缓存连接已关闭")
+    except Exception as e:
+        logger.warning(f"缓存关闭失败: {e}")
+
+    logger.info("核心子系统已全部关闭")

@@ -874,6 +874,7 @@ class UnifiedWebUI:
             justify-content: space-between;
             padding: 8px 0;
             border-bottom: 1px solid rgba(255,255,255,0.05);
+            font-size: 0.9rem;
         }
         .log-panel {
             height: 300px;
@@ -885,10 +886,40 @@ class UnifiedWebUI:
             padding: 10px;
             border-radius: 4px;
         }
-        .log-entry { margin-bottom: 4px; }
+        .log-entry { margin-bottom: 4px; line-height: 1.4; }
         .log-info { color: #00d4ff; }
         .log-warn { color: #ffaa00; }
         .log-error { color: #ff4444; }
+
+        /* 页脚 */
+        .footer {
+            grid-column: span 12;
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+            padding: 16px 0;
+            margin-top: 8px;
+            border-top: 1px solid var(--border);
+            font-size: 0.8rem;
+            color: var(--text-dim);
+        }
+        .footer-uptime { color: var(--accent); font-family: monospace; }
+
+        /* 响应式布局 */
+        @media (max-width: 1200px) {
+            .devices-section { grid-column: span 12; }
+            .system-section { grid-column: span 12; flex-direction: row; flex-wrap: wrap; }
+            .system-section .card { flex: 1; min-width: 250px; }
+        }
+        @media (max-width: 768px) {
+            .dashboard-grid { grid-template-columns: 1fr; }
+            .devices-section,
+            .system-section,
+            .card { grid-column: span 1 !important; }
+            .system-section { flex-direction: column; }
+            .top-bar { flex-direction: column; gap: 10px; text-align: center; }
+            .footer { flex-direction: column; gap: 8px; text-align: center; }
+        }
 
     </style>
 </head>
@@ -985,6 +1016,13 @@ class UnifiedWebUI:
                     <div class="log-entry"><span class="log-info">[INFO]</span> 系统初始化完成</div>
                     <div class="log-entry"><span class="log-info">[INFO]</span> 等待 WebSocket 连接...</div>
                 </div>
+            </div>
+
+            <!-- 页脚 -->
+            <div class="footer">
+                <span>UFO Galaxy v3.0.0 | L4 Autonomous System</span>
+                <span>Subsystems: Cache + Monitoring + Performance + CommandRouter + AI Intent + EventBridge</span>
+                <span class="footer-uptime" id="footer-uptime">Uptime: --</span>
             </div>
         </div>
     </div>
@@ -1157,10 +1195,39 @@ class UnifiedWebUI:
             }
         }
 
+        // 运行时间计数器
+        const startTime = Date.now();
+        function updateUptime() {
+            const elapsed = Math.floor((Date.now() - startTime) / 1000);
+            const h = Math.floor(elapsed / 3600);
+            const m = Math.floor((elapsed % 3600) / 60);
+            const s = elapsed % 60;
+            const parts = [];
+            if (h > 0) parts.push(`${h}h`);
+            parts.push(`${m}m`);
+            parts.push(`${s}s`);
+            document.getElementById('footer-uptime').textContent = `Uptime: ${parts.join(' ')}`;
+        }
+
+        // 键盘快捷键
+        document.addEventListener('keydown', (e) => {
+            if (e.key === 'r' && !e.ctrlKey && !e.metaKey && e.target.tagName !== 'INPUT') {
+                refreshPerformance();
+                refreshMonitoring();
+                refreshCmdStats();
+                log('手动刷新', 'info');
+            }
+            if (e.key === '/' && e.target.tagName !== 'INPUT') {
+                e.preventDefault();
+                document.getElementById('ai-input').focus();
+            }
+        });
+
         // 定时刷新
         setInterval(refreshPerformance, 10000);
         setInterval(refreshMonitoring, 30000);
         setInterval(refreshCmdStats, 5000);
+        setInterval(updateUptime, 1000);
         connect();
     </script>
 </body>
@@ -1271,14 +1338,34 @@ class UFOGalaxyUnified:
                 await asyncio.sleep(1)
                 
     def stop(self):
-        """停止系统"""
+        """停止系统（优雅关闭所有子系统）"""
         print()
         print_status("正在停止系统...", "loading")
         self.service_manager.state = SystemState.STOPPING
         self.running = False
+
+        # 优雅关闭核心子系统（事件桥 → 监控 → 缓存）
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                # 在已运行的 loop 中安排关闭任务
+                asyncio.ensure_future(self._async_shutdown())
+            else:
+                loop.run_until_complete(self._async_shutdown())
+        except Exception as e:
+            logger.warning(f"异步关闭失败: {e}")
+
         self.service_manager.stop_all()
         self.service_manager.state = SystemState.STOPPED
         print_status("系统已停止", "success")
+
+    async def _async_shutdown(self):
+        """异步关闭核心子系统"""
+        try:
+            from core.startup import shutdown_subsystems
+            await shutdown_subsystems()
+        except Exception as e:
+            logger.warning(f"子系统关闭异常: {e}")
         
     def show_status(self):
         """显示系统状态"""
