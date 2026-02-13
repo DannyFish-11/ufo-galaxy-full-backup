@@ -244,9 +244,12 @@ async def shutdown_subsystems():
 
     # 4. 缓存
     try:
-        from core.cache import _cache_instance
-        if _cache_instance:
-            await _cache_instance.close()
+        from core.cache import get_cache as _get_cache_ref
+        # 通过模块级变量安全获取已初始化的实例
+        import core.cache as _cache_mod
+        instance = getattr(_cache_mod, '_cache_instance', None)
+        if instance:
+            await instance.close()
             logger.info("缓存连接已关闭")
     except Exception as e:
         logger.warning(f"缓存关闭失败: {e}")

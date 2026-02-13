@@ -196,10 +196,17 @@ class EventBus:
         
         if async_dispatch and self._running:
             # 异步分发
-            self._event_queue.put_nowait(event)
+            try:
+                self._event_queue.put_nowait(event)
+            except asyncio.QueueFull:
+                self._logger.warning(f"事件队列已满，丢弃事件: {event.event_type.name}")
         else:
             # 同步分发
-            asyncio.create_task(self._dispatch_event(event))
+            try:
+                asyncio.create_task(self._dispatch_event(event))
+            except RuntimeError:
+                # 没有运行中的事件循环
+                pass
     
     def publish_sync(self, event_type: EventType, source: str, data: Dict[str, Any] = None):
         """同步发布事件（快捷方法）"""

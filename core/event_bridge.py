@@ -62,26 +62,31 @@ class EventBridge:
 
             async def _cmd_to_event_bus(cmd_result):
                 """命令结果 → 事件总线"""
-                status = cmd_result.status.value
-                event_type = EventType.COMMAND_RESULT
-
-                event_bus.publish_sync(
-                    event_type,
-                    source="command_router",
-                    data={
-                        "request_id": cmd_result.request_id,
-                        "status": status,
-                        "total_latency_ms": cmd_result.total_latency_ms,
-                        "targets": list(cmd_result.targets.keys()),
-                    },
-                )
+                try:
+                    event_bus.publish_sync(
+                        EventType.COMMAND_RESULT,
+                        source="command_router",
+                        data={
+                            "request_id": cmd_result.request_id,
+                            "status": cmd_result.status.value,
+                            "total_latency_ms": cmd_result.total_latency_ms,
+                            "targets": list(cmd_result.targets.keys()),
+                        },
+                    )
+                except Exception as pub_err:
+                    logger.warning(f"EventBridge: 发布命令结果事件失败: {pub_err}")
 
                 # 链式调用原有回调（WebSocket 推送）
                 if _original_on_status:
-                    if asyncio.iscoroutinefunction(_original_on_status):
-                        await _original_on_status(cmd_result)
-                    else:
-                        _original_on_status(cmd_result)
+                    try:
+                        if asyncio.iscoroutinefunction(_original_on_status):
+                            await _original_on_status(cmd_result)
+                        elif asyncio.iscoroutine(_original_on_status):
+                            await _original_on_status
+                        else:
+                            _original_on_status(cmd_result)
+                    except Exception as cb_err:
+                        logger.warning(f"EventBridge: 原始回调执行失败: {cb_err}")
 
             cmd_router._on_status_change = _cmd_to_event_bus
             logger.info("EventBridge: CommandRouter → EventBus 已连接")
@@ -100,22 +105,28 @@ class EventBridge:
 
             async def _alert_to_event_bus(alert):
                 """告警 → 事件总线"""
-                event_bus.publish_sync(
-                    EventType.PERFORMANCE_ALERT,
-                    source="monitoring",
-                    data={
-                        "alert_id": alert.alert_id,
-                        "severity": alert.severity.value,
-                        "component": alert.component,
-                        "message": alert.message,
-                    },
-                )
+                try:
+                    event_bus.publish_sync(
+                        EventType.PERFORMANCE_ALERT,
+                        source="monitoring",
+                        data={
+                            "alert_id": alert.alert_id,
+                            "severity": alert.severity.value,
+                            "component": alert.component,
+                            "message": alert.message,
+                        },
+                    )
+                except Exception as pub_err:
+                    logger.warning(f"EventBridge: 发布告警事件失败: {pub_err}")
 
                 if _original_on_alert:
-                    if asyncio.iscoroutinefunction(_original_on_alert):
-                        await _original_on_alert(alert)
-                    else:
-                        _original_on_alert(alert)
+                    try:
+                        if asyncio.iscoroutinefunction(_original_on_alert):
+                            await _original_on_alert(alert)
+                        else:
+                            _original_on_alert(alert)
+                    except Exception as cb_err:
+                        logger.warning(f"EventBridge: 原始告警回调失败: {cb_err}")
 
             monitoring.alerts._on_alert = _alert_to_event_bus
             logger.info("EventBridge: Monitoring Alerts → EventBus 已连接")

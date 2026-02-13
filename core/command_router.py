@@ -484,8 +484,22 @@ _command_router: Optional[CommandRouter] = None
 
 
 def get_command_router(**kwargs) -> CommandRouter:
-    """获取全局命令路由实例"""
+    """
+    获取全局命令路由实例
+
+    首次调用创建实例，后续调用返回已有实例。
+    如果实例已存在但传入了 on_status_change / executor / cache_backend，
+    则动态更新这些属性（避免单例初始化顺序问题）。
+    """
     global _command_router
     if _command_router is None:
         _command_router = CommandRouter(**kwargs)
+    else:
+        # 动态更新可变属性
+        if "on_status_change" in kwargs and kwargs["on_status_change"] is not None:
+            _command_router._on_status_change = kwargs["on_status_change"]
+        if "executor" in kwargs and kwargs["executor"] is not None:
+            _command_router._executor = kwargs["executor"]
+        if "cache_backend" in kwargs and kwargs["cache_backend"] is not None:
+            _command_router._cache = kwargs["cache_backend"]
     return _command_router

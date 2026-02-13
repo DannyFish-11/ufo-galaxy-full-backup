@@ -183,7 +183,7 @@ class ConnectionManager:
         # 推送给 status 订阅者
         await self.broadcast_status(payload)
         # 推送给涉及的设备
-        for target in command_result_dict.get("targets", {}):
+        for target in command_result_dict.get("targets", {}).keys():
             if target in self.active_devices:
                 await self.send_to_device(target, payload)
 
@@ -608,9 +608,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 executed_tasks = []
                 if "唤醒" in req.instruction:
                     for did in registered_devices:
-                        await connection_manager.send_personal_message(
+                        await connection_manager.send_to_device(
+                            did,
                             {"type": "task", "task_type": "wake_up", "payload": {"msg": req.instruction}},
-                            did
                         )
                         executed_tasks.append(f"Waking up device {did}")
                     return {

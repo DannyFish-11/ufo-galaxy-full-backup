@@ -80,10 +80,10 @@ def get_vision_pipeline(config=None):
 
 # --- 新增核心子系统 ---
 
-def get_cache_manager():
-    """获取全局缓存管理器（需异步初始化: await get_cache()）"""
-    from .cache import CacheManager
-    return CacheManager
+async def get_cache_manager(redis_url: str = ""):
+    """获取全局缓存管理器实例（异步初始化）"""
+    from .cache import get_cache
+    return await get_cache(redis_url)
 
 def get_monitoring():
     """获取全局监控管理器"""
