@@ -12,6 +12,10 @@ UFO Galaxy - 系统启动引导
   5. AI 意图引擎（解析器、记忆、推荐）
   6. 向量数据库（Qdrant）
   7. 事件桥接（EventBus ↔ 所有子系统）
+  8. 多 LLM 智能路由器
+  9. 动态 Agent 工厂 + 分形执行器
+  10. 数字孪生引擎
+  11. 三位一体世界模型
 
 所有模块均支持优雅降级：缺少 Redis → 内存缓存，缺少 LLM → 规则引擎。
 """
@@ -186,7 +190,76 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"事件桥接建立失败: {e}")
 
     # ====================================================================
-    # 8. Galaxy Gateway 挂载（作为子应用）
+    # 8. 多 LLM 智能路由器
+    # ====================================================================
+    llm_router = None
+    try:
+        from core.multi_llm_router import get_llm_router
+
+        llm_router = get_llm_router()
+        status = llm_router.get_status()
+        results["llm_router"] = {
+            "status": "ok",
+            "providers": status["total_providers"],
+            "healthy": status["healthy_providers"],
+        }
+        logger.info(
+            f"多 LLM 路由器已初始化: "
+            f"{status['total_providers']} 提供商, "
+            f"{status['healthy_providers']} 可用"
+        )
+    except Exception as e:
+        results["llm_router"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"多 LLM 路由器初始化失败: {e}")
+
+    # ====================================================================
+    # 9. 动态 Agent 工厂 + 分形执行器
+    # ====================================================================
+    try:
+        from core.agent_factory import get_agent_factory
+        from core.fractal_agent import get_fractal_executor
+
+        agent_factory = get_agent_factory(llm_router=llm_router)
+        fractal_executor = get_fractal_executor(
+            llm_router=llm_router, agent_factory=agent_factory
+        )
+        results["agent_system"] = {"status": "ok", "llm_enabled": llm_router is not None}
+        logger.info(
+            f"Agent 系统已初始化 (工厂 + 分形执行器, "
+            f"LLM: {'启用' if llm_router else '降级'})"
+        )
+    except Exception as e:
+        results["agent_system"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"Agent 系统初始化失败: {e}")
+
+    # ====================================================================
+    # 10. 数字孪生引擎
+    # ====================================================================
+    try:
+        from core.digital_twin_engine import get_digital_twin_engine
+
+        twin_engine = get_digital_twin_engine()
+        results["digital_twin"] = {"status": "ok"}
+        logger.info("数字孪生引擎已初始化")
+    except Exception as e:
+        results["digital_twin"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"数字孪生引擎初始化失败: {e}")
+
+    # ====================================================================
+    # 11. 三位一体世界模型
+    # ====================================================================
+    try:
+        from enhancements.reasoning.world_model import WorldModel
+
+        world_model = WorldModel()
+        results["world_model"] = {"status": "ok", "pillars": ["ontology", "epistemology", "information"]}
+        logger.info("三位一体世界模型已初始化 (本体论 + 认知论 + 信息论)")
+    except Exception as e:
+        results["world_model"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"世界模型初始化失败: {e}")
+
+    # ====================================================================
+    # 12. Galaxy Gateway 挂载（作为子应用）
     # ====================================================================
     try:
         from galaxy_gateway.app import app as gateway_app
@@ -214,6 +287,24 @@ async def shutdown_subsystems():
     调用顺序与启动相反：事件桥 → AI → 命令路由 → 监控 → 缓存
     """
     logger.info("开始关闭核心子系统...")
+
+    # 0. 数字孪生引擎
+    try:
+        from core.digital_twin_engine import get_digital_twin_engine
+        twin_engine = get_digital_twin_engine()
+        await twin_engine.shutdown()
+        logger.info("数字孪生引擎已关闭")
+    except Exception as e:
+        logger.warning(f"数字孪生引擎关闭失败: {e}")
+
+    # 0b. LLM 路由器
+    try:
+        from core.multi_llm_router import get_llm_router
+        router = get_llm_router()
+        await router.close()
+        logger.info("LLM 路由器已关闭")
+    except Exception as e:
+        logger.warning(f"LLM 路由器关闭失败: {e}")
 
     # 1. 事件桥接
     try:

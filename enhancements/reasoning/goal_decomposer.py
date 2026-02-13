@@ -1,11 +1,18 @@
 """
-目标分解器 (Goal Decomposer)
-将高层次目标分解为可执行的子任务
+LLM 驱动的目标分解器 (Goal Decomposer)
+========================================
+
+将高层次目标分解为可执行的子任务。
+
+两种工作模式：
+1. LLM 模式（优先）- 用大模型理解目标语义并智能分解
+2. 规则模式（降级）- 基于关键词和模板的分解（无 LLM 时自动降级）
 """
 
+import json
 import logging
 from typing import List, Dict, Optional
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from enum import Enum
 
 logger = logging.getLogger(__name__)
@@ -18,6 +25,8 @@ class GoalType(Enum):
     PROBLEM_SOLVING = "problem_solving"
     CREATION = "creation"
     AUTOMATION = "automation"
+    MULTI_DEVICE = "multi_device"
+    ANALYSIS = "analysis"
 
 
 class SubTaskType(Enum):
@@ -30,6 +39,8 @@ class SubTaskType(Enum):
     SYNTHESIZE = "synthesize"
     CONTROL_DEVICE = "control_device"
     COMMUNICATE = "communicate"
+    PLAN = "plan"
+    VALIDATE = "validate"
 
 
 @dataclass
@@ -42,17 +53,19 @@ class SubTask:
     required_capabilities: List[str]
     estimated_duration: int  # 秒
     priority: int  # 1-10, 10 最高
-    metadata: Dict
+    metadata: Dict = field(default_factory=dict)
+    assignee_hint: str = ""  # 建议的执行者
 
 
 @dataclass
 class Goal:
     """目标"""
     description: str
-    type: GoalType
-    constraints: List[str]
-    success_criteria: List[str]
-    deadline: Optional[int]  # Unix timestamp
+    type: GoalType = GoalType.TASK_EXECUTION
+    constraints: List[str] = field(default_factory=list)
+    success_criteria: List[str] = field(default_factory=list)
+    deadline: Optional[int] = None  # Unix timestamp
+    context: Dict = field(default_factory=dict)
 
 
 @dataclass
@@ -62,345 +75,342 @@ class DecompositionResult:
     subtasks: List[SubTask]
     execution_order: List[str]  # 子任务 ID 的执行顺序
     estimated_total_duration: int
+    decomposition_strategy: str = ""  # 分解策略说明
+    parallelizable_groups: List[List[str]] = field(default_factory=list)  # 可并行的子任务组
 
 
 class GoalDecomposer:
-    """目标分解器"""
-    
-    def __init__(self, llm_client=None):
-        self.llm_client = llm_client
-        logger.info("GoalDecomposer initialized")
-    
-    def decompose(self, goal: Goal) -> DecompositionResult:
-        """分解目标"""
+    """
+    LLM 驱动的目标分解器
+
+    优先使用 LLM 进行语义理解和智能分解，
+    LLM 不可用时降级到基于规则的分解。
+    """
+
+    def __init__(self, llm_router=None):
+        self.llm_router = llm_router
+        self._mode = "llm" if llm_router else "rule"
+        logger.info(f"GoalDecomposer 已初始化 (模式: {self._mode})")
+
+    async def decompose_async(self, goal: Goal) -> DecompositionResult:
+        """异步分解目标（优先使用 LLM）"""
         logger.info(f"开始分解目标: {goal.description}")
-        
-        # 1. 识别目标类型
-        goal_type = self._identify_goal_type(goal)
-        logger.info(f"目标类型: {goal_type.value}")
-        
-        # 2. 生成子任务
-        subtasks = self._generate_subtasks(goal, goal_type)
-        logger.info(f"生成了 {len(subtasks)} 个子任务")
-        
-        # 3. 确定执行顺序
+
+        if self.llm_router:
+            try:
+                return await self._decompose_with_llm(goal)
+            except Exception as e:
+                logger.warning(f"LLM 分解失败: {e}，降级到规则分解")
+
+        return self.decompose(goal)
+
+    async def _decompose_with_llm(self, goal: Goal) -> DecompositionResult:
+        """用 LLM 分解目标"""
+        prompt = self._build_decomposition_prompt(goal)
+
+        result = await self.llm_router.chat_json(
+            messages=[
+                {"role": "system", "content": (
+                    "你是一个任务分解专家。将用户的高层目标分解为具体可执行的子任务。\n"
+                    "考虑任务之间的依赖关系、所需能力和执行顺序。\n"
+                    "返回严格的 JSON 格式。"
+                )},
+                {"role": "user", "content": prompt},
+            ],
+            task_type="planning",
+        )
+
+        # 解析 LLM 响应
+        subtasks = []
+        for i, st_data in enumerate(result.get("subtasks", [])):
+            try:
+                st_type = SubTaskType(st_data.get("type", "execute"))
+            except ValueError:
+                st_type = SubTaskType.EXECUTE
+
+            subtasks.append(SubTask(
+                id=st_data.get("id", f"st_{i}"),
+                type=st_type,
+                description=st_data.get("description", ""),
+                dependencies=st_data.get("dependencies", []),
+                required_capabilities=st_data.get("required_capabilities", []),
+                estimated_duration=st_data.get("estimated_duration", 60),
+                priority=st_data.get("priority", 5),
+                metadata=st_data.get("metadata", {}),
+                assignee_hint=st_data.get("assignee_hint", ""),
+            ))
+
+        # 确定执行顺序
         execution_order = self._determine_execution_order(subtasks)
-        logger.info(f"执行顺序: {' -> '.join(execution_order)}")
-        
-        # 4. 估算总时长
-        total_duration = sum(st.estimated_duration for st in subtasks)
-        
+
+        # 识别可并行组
+        parallel_groups = self._identify_parallel_groups(subtasks)
+
+        goal_type_str = result.get("goal_type", "task_execution")
+        try:
+            goal.type = GoalType(goal_type_str)
+        except ValueError:
+            pass
+
         return DecompositionResult(
             goal=goal,
             subtasks=subtasks,
             execution_order=execution_order,
-            estimated_total_duration=total_duration
+            estimated_total_duration=sum(st.estimated_duration for st in subtasks),
+            decomposition_strategy=result.get("strategy", "LLM 智能分解"),
+            parallelizable_groups=parallel_groups,
         )
-    
+
+    def _build_decomposition_prompt(self, goal: Goal) -> str:
+        constraints_str = "\n".join(f"  - {c}" for c in goal.constraints) if goal.constraints else "无"
+        criteria_str = "\n".join(f"  - {c}" for c in goal.success_criteria) if goal.success_criteria else "无"
+        context_str = json.dumps(goal.context, ensure_ascii=False, indent=2) if goal.context else "无"
+
+        return f"""请将以下目标分解为具体可执行的子任务。
+
+目标: {goal.description}
+约束条件:
+{constraints_str}
+成功标准:
+{criteria_str}
+上下文:
+{context_str}
+
+请返回 JSON:
+{{
+    "goal_type": "information_gathering|task_execution|problem_solving|creation|automation|multi_device|analysis",
+    "strategy": "分解策略的简要说明",
+    "subtasks": [
+        {{
+            "id": "st_0",
+            "type": "search|read|write|execute|analyze|synthesize|control_device|communicate|plan|validate",
+            "description": "具体描述",
+            "dependencies": [],
+            "required_capabilities": ["capability_1"],
+            "estimated_duration": 60,
+            "priority": 10,
+            "assignee_hint": "建议由谁执行 (agent类型)",
+            "metadata": {{}}
+        }}
+    ]
+}}
+
+要求：
+1. 子任务要足够具体，每个子任务可以独立执行
+2. 正确标注依赖关系（哪些任务必须先完成）
+3. 可以并行的任务不要添加不必要的依赖
+4. 合理估算每个子任务的执行时间（秒）
+5. 优先级 1-10，10 最高"""
+
+    def _identify_parallel_groups(self, subtasks: List[SubTask]) -> List[List[str]]:
+        """识别可以并行执行的子任务组"""
+        groups = []
+        used = set()
+
+        # 找出没有依赖或依赖相同的子任务
+        dep_map = {st.id: tuple(sorted(st.dependencies)) for st in subtasks}
+
+        # 按依赖分组
+        dep_groups: Dict[tuple, List[str]] = {}
+        for st in subtasks:
+            key = tuple(sorted(st.dependencies))
+            if key not in dep_groups:
+                dep_groups[key] = []
+            dep_groups[key].append(st.id)
+
+        for deps, task_ids in dep_groups.items():
+            if len(task_ids) > 1:
+                groups.append(task_ids)
+
+        return groups
+
+    # ─────── 规则模式（降级）─────────
+
+    def decompose(self, goal: Goal) -> DecompositionResult:
+        """同步分解目标（规则模式）"""
+        goal_type = self._identify_goal_type(goal)
+        goal.type = goal_type
+        logger.info(f"目标类型: {goal_type.value}")
+
+        subtasks = self._generate_subtasks(goal, goal_type)
+        execution_order = self._determine_execution_order(subtasks)
+        total_duration = sum(st.estimated_duration for st in subtasks)
+
+        return DecompositionResult(
+            goal=goal,
+            subtasks=subtasks,
+            execution_order=execution_order,
+            estimated_total_duration=total_duration,
+            decomposition_strategy="基于规则的分解",
+        )
+
     def _identify_goal_type(self, goal: Goal) -> GoalType:
         """识别目标类型"""
         description_lower = goal.description.lower()
-        
-        # 简单的关键词匹配
+
         if any(kw in description_lower for kw in ['查找', '搜索', '了解', 'find', 'search', 'learn']):
             return GoalType.INFORMATION_GATHERING
-        
         if any(kw in description_lower for kw in ['创建', '生成', '设计', 'create', 'generate', 'design']):
             return GoalType.CREATION
-        
         if any(kw in description_lower for kw in ['解决', '修复', '调试', 'solve', 'fix', 'debug']):
             return GoalType.PROBLEM_SOLVING
-        
         if any(kw in description_lower for kw in ['自动化', '定时', 'automate', 'schedule']):
             return GoalType.AUTOMATION
-        
+        if any(kw in description_lower for kw in ['分析', '评估', 'analyze', 'evaluate']):
+            return GoalType.ANALYSIS
+        if any(kw in description_lower for kw in ['设备', '无人机', '打印', 'device', 'drone']):
+            return GoalType.MULTI_DEVICE
+
         return GoalType.TASK_EXECUTION
-    
+
     def _generate_subtasks(self, goal: Goal, goal_type: GoalType) -> List[SubTask]:
-        """生成子任务"""
-        if goal_type == GoalType.INFORMATION_GATHERING:
-            return self._generate_information_gathering_subtasks(goal)
-        elif goal_type == GoalType.CREATION:
-            return self._generate_creation_subtasks(goal)
-        elif goal_type == GoalType.PROBLEM_SOLVING:
-            return self._generate_problem_solving_subtasks(goal)
-        elif goal_type == GoalType.AUTOMATION:
-            return self._generate_automation_subtasks(goal)
-        else:
-            return self._generate_generic_subtasks(goal)
-    
-    def _generate_information_gathering_subtasks(self, goal: Goal) -> List[SubTask]:
-        """生成信息收集子任务"""
-        subtasks = [
-            SubTask(
-                id="search_1",
-                type=SubTaskType.SEARCH,
-                description=f"搜索相关信息: {goal.description}",
-                dependencies=[],
-                required_capabilities=['web_search', 'information_retrieval'],
-                estimated_duration=30,
-                priority=10,
-                metadata={}
-            ),
-            SubTask(
-                id="read_1",
-                type=SubTaskType.READ,
-                description="阅读和理解搜索结果",
-                dependencies=["search_1"],
-                required_capabilities=['text_understanding', 'summarization'],
-                estimated_duration=60,
-                priority=9,
-                metadata={}
-            ),
-            SubTask(
-                id="synthesize_1",
-                type=SubTaskType.SYNTHESIZE,
-                description="综合信息并生成报告",
-                dependencies=["read_1"],
-                required_capabilities=['text_generation', 'analysis'],
-                estimated_duration=45,
-                priority=8,
-                metadata={}
-            ),
+        """生成子任务（规则模式）"""
+        generators = {
+            GoalType.INFORMATION_GATHERING: self._gen_information_subtasks,
+            GoalType.CREATION: self._gen_creation_subtasks,
+            GoalType.PROBLEM_SOLVING: self._gen_problem_solving_subtasks,
+            GoalType.AUTOMATION: self._gen_automation_subtasks,
+            GoalType.ANALYSIS: self._gen_analysis_subtasks,
+        }
+        generator = generators.get(goal_type, self._gen_generic_subtasks)
+        return generator(goal)
+
+    def _gen_information_subtasks(self, goal: Goal) -> List[SubTask]:
+        return [
+            SubTask(id="st_0", type=SubTaskType.SEARCH,
+                    description=f"搜索相关信息: {goal.description}",
+                    dependencies=[], required_capabilities=['web_search', 'information_retrieval'],
+                    estimated_duration=30, priority=10),
+            SubTask(id="st_1", type=SubTaskType.READ,
+                    description="阅读和理解搜索结果",
+                    dependencies=["st_0"], required_capabilities=['text_understanding'],
+                    estimated_duration=60, priority=9),
+            SubTask(id="st_2", type=SubTaskType.SYNTHESIZE,
+                    description="综合信息并生成报告",
+                    dependencies=["st_1"], required_capabilities=['text_generation', 'analysis'],
+                    estimated_duration=45, priority=8),
         ]
-        return subtasks
-    
-    def _generate_creation_subtasks(self, goal: Goal) -> List[SubTask]:
-        """生成创作子任务"""
-        subtasks = [
-            SubTask(
-                id="analyze_1",
-                type=SubTaskType.ANALYZE,
-                description=f"分析创作需求: {goal.description}",
-                dependencies=[],
-                required_capabilities=['requirement_analysis'],
-                estimated_duration=30,
-                priority=10,
-                metadata={}
-            ),
-            SubTask(
-                id="write_1",
-                type=SubTaskType.WRITE,
-                description="生成初稿",
-                dependencies=["analyze_1"],
-                required_capabilities=['content_generation', 'creativity'],
-                estimated_duration=120,
-                priority=9,
-                metadata={}
-            ),
-            SubTask(
-                id="analyze_2",
-                type=SubTaskType.ANALYZE,
-                description="评估和优化",
-                dependencies=["write_1"],
-                required_capabilities=['quality_assessment', 'optimization'],
-                estimated_duration=60,
-                priority=8,
-                metadata={}
-            ),
+
+    def _gen_creation_subtasks(self, goal: Goal) -> List[SubTask]:
+        return [
+            SubTask(id="st_0", type=SubTaskType.ANALYZE,
+                    description=f"分析创作需求: {goal.description}",
+                    dependencies=[], required_capabilities=['requirement_analysis'],
+                    estimated_duration=30, priority=10),
+            SubTask(id="st_1", type=SubTaskType.WRITE,
+                    description="生成初稿",
+                    dependencies=["st_0"], required_capabilities=['content_generation'],
+                    estimated_duration=120, priority=9),
+            SubTask(id="st_2", type=SubTaskType.VALIDATE,
+                    description="评估和优化",
+                    dependencies=["st_1"], required_capabilities=['quality_assessment'],
+                    estimated_duration=60, priority=8),
         ]
-        return subtasks
-    
-    def _generate_problem_solving_subtasks(self, goal: Goal) -> List[SubTask]:
-        """生成问题解决子任务"""
-        subtasks = [
-            SubTask(
-                id="analyze_1",
-                type=SubTaskType.ANALYZE,
-                description=f"分析问题: {goal.description}",
-                dependencies=[],
-                required_capabilities=['problem_analysis', 'root_cause_analysis'],
-                estimated_duration=45,
-                priority=10,
-                metadata={}
-            ),
-            SubTask(
-                id="search_1",
-                type=SubTaskType.SEARCH,
-                description="搜索解决方案",
-                dependencies=["analyze_1"],
-                required_capabilities=['web_search', 'knowledge_retrieval'],
-                estimated_duration=30,
-                priority=9,
-                metadata={}
-            ),
-            SubTask(
-                id="execute_1",
-                type=SubTaskType.EXECUTE,
-                description="执行解决方案",
-                dependencies=["search_1"],
-                required_capabilities=['task_execution', 'system_control'],
-                estimated_duration=90,
-                priority=8,
-                metadata={}
-            ),
-            SubTask(
-                id="analyze_2",
-                type=SubTaskType.ANALYZE,
-                description="验证解决方案",
-                dependencies=["execute_1"],
-                required_capabilities=['testing', 'validation'],
-                estimated_duration=30,
-                priority=7,
-                metadata={}
-            ),
+
+    def _gen_problem_solving_subtasks(self, goal: Goal) -> List[SubTask]:
+        return [
+            SubTask(id="st_0", type=SubTaskType.ANALYZE,
+                    description=f"分析问题: {goal.description}",
+                    dependencies=[], required_capabilities=['problem_analysis'],
+                    estimated_duration=45, priority=10),
+            SubTask(id="st_1", type=SubTaskType.SEARCH,
+                    description="搜索解决方案",
+                    dependencies=["st_0"], required_capabilities=['web_search'],
+                    estimated_duration=30, priority=9),
+            SubTask(id="st_2", type=SubTaskType.EXECUTE,
+                    description="执行解决方案",
+                    dependencies=["st_1"], required_capabilities=['task_execution'],
+                    estimated_duration=90, priority=8),
+            SubTask(id="st_3", type=SubTaskType.VALIDATE,
+                    description="验证解决方案",
+                    dependencies=["st_2"], required_capabilities=['testing'],
+                    estimated_duration=30, priority=7),
         ]
-        return subtasks
-    
-    def _generate_automation_subtasks(self, goal: Goal) -> List[SubTask]:
-        """生成自动化子任务"""
-        subtasks = [
-            SubTask(
-                id="analyze_1",
-                type=SubTaskType.ANALYZE,
-                description=f"分析自动化需求: {goal.description}",
-                dependencies=[],
-                required_capabilities=['workflow_analysis'],
-                estimated_duration=30,
-                priority=10,
-                metadata={}
-            ),
-            SubTask(
-                id="write_1",
-                type=SubTaskType.WRITE,
-                description="编写自动化脚本",
-                dependencies=["analyze_1"],
-                required_capabilities=['code_generation', 'scripting'],
-                estimated_duration=120,
-                priority=9,
-                metadata={}
-            ),
-            SubTask(
-                id="execute_1",
-                type=SubTaskType.EXECUTE,
-                description="测试自动化脚本",
-                dependencies=["write_1"],
-                required_capabilities=['testing', 'execution'],
-                estimated_duration=60,
-                priority=8,
-                metadata={}
-            ),
-            SubTask(
-                id="execute_2",
-                type=SubTaskType.EXECUTE,
-                description="部署自动化任务",
-                dependencies=["execute_1"],
-                required_capabilities=['deployment', 'scheduling'],
-                estimated_duration=30,
-                priority=7,
-                metadata={}
-            ),
+
+    def _gen_automation_subtasks(self, goal: Goal) -> List[SubTask]:
+        return [
+            SubTask(id="st_0", type=SubTaskType.ANALYZE,
+                    description=f"分析自动化需求: {goal.description}",
+                    dependencies=[], required_capabilities=['workflow_analysis'],
+                    estimated_duration=30, priority=10),
+            SubTask(id="st_1", type=SubTaskType.WRITE,
+                    description="编写自动化脚本",
+                    dependencies=["st_0"], required_capabilities=['code_generation'],
+                    estimated_duration=120, priority=9),
+            SubTask(id="st_2", type=SubTaskType.EXECUTE,
+                    description="测试自动化脚本",
+                    dependencies=["st_1"], required_capabilities=['testing'],
+                    estimated_duration=60, priority=8),
+            SubTask(id="st_3", type=SubTaskType.EXECUTE,
+                    description="部署自动化任务",
+                    dependencies=["st_2"], required_capabilities=['deployment'],
+                    estimated_duration=30, priority=7),
         ]
-        return subtasks
-    
-    def _generate_generic_subtasks(self, goal: Goal) -> List[SubTask]:
-        """生成通用子任务"""
-        description_lower = goal.description.lower()
-        
-        # 检测是否涉及 3D 打印机
-        has_3d_printer = any(kw in description_lower for kw in ['3d打印', '打印机', '3d print', 'printer'])
-        # 检测是否涉及无人机
-        has_drone = any(kw in description_lower for kw in ['无人机', '飞机', 'drone', 'uav'])
-        
-        subtasks = []
-        
-        if has_3d_printer:
-            subtasks.append(SubTask(
-                id="print_1",
-                type=SubTaskType.CONTROL_DEVICE,
-                description=f"使用 3D 打印机打印",
-                dependencies=[],
-                required_capabilities=['3d_printing', 'file_upload'],
-                estimated_duration=120,
-                priority=10,
-                metadata={'device_type': '3d_printer'}
-            ))
-        
-        if has_drone:
-            subtasks.append(SubTask(
-                id="drone_1",
-                type=SubTaskType.CONTROL_DEVICE,
-                description=f"控制无人机执行任务",
-                dependencies=["print_1"] if has_3d_printer else [],
-                required_capabilities=['drone_control', 'takeoff', 'land', 'capture_image'],
-                estimated_duration=60,
-                priority=9,
-                metadata={'device_type': 'drone'}
-            ))
-        
-        # 如果没有检测到特定设备，使用通用子任务
-        if not subtasks:
-            subtasks = [
-                SubTask(
-                    id="analyze_1",
-                    type=SubTaskType.ANALYZE,
+
+    def _gen_analysis_subtasks(self, goal: Goal) -> List[SubTask]:
+        return [
+            SubTask(id="st_0", type=SubTaskType.SEARCH,
+                    description=f"收集数据: {goal.description}",
+                    dependencies=[], required_capabilities=['data_collection'],
+                    estimated_duration=45, priority=10),
+            SubTask(id="st_1", type=SubTaskType.ANALYZE,
+                    description="数据分析和统计",
+                    dependencies=["st_0"], required_capabilities=['data_analysis', 'statistics'],
+                    estimated_duration=90, priority=9),
+            SubTask(id="st_2", type=SubTaskType.SYNTHESIZE,
+                    description="生成分析报告",
+                    dependencies=["st_1"], required_capabilities=['report_generation'],
+                    estimated_duration=60, priority=8),
+        ]
+
+    def _gen_generic_subtasks(self, goal: Goal) -> List[SubTask]:
+        return [
+            SubTask(id="st_0", type=SubTaskType.ANALYZE,
                     description=f"分析任务: {goal.description}",
-                    dependencies=[],
-                    required_capabilities=['text_understanding', 'analysis'],
-                    estimated_duration=30,
-                    priority=10,
-                    metadata={}
-                ),
-                SubTask(
-                    id="execute_1",
-                    type=SubTaskType.EXECUTE,
+                    dependencies=[], required_capabilities=['text_understanding'],
+                    estimated_duration=30, priority=10),
+            SubTask(id="st_1", type=SubTaskType.EXECUTE,
                     description="执行任务",
-                    dependencies=["analyze_1"],
-                    required_capabilities=['task_execution', 'system_control'],
-                    estimated_duration=90,
-                    priority=9,
-                    metadata={}
-                ),
-            ]
-        
-        return subtasks
-    
+                    dependencies=["st_0"], required_capabilities=['task_execution'],
+                    estimated_duration=90, priority=9),
+        ]
+
     def _determine_execution_order(self, subtasks: List[SubTask]) -> List[str]:
-        """确定执行顺序（拓扑排序）"""
-        # 构建依赖图
+        """拓扑排序确定执行顺序"""
         dep_graph = {st.id: st.dependencies for st in subtasks}
-        
-        # 拓扑排序
         order = []
         visited = set()
-        
+
         def visit(task_id: str):
             if task_id in visited:
                 return
             visited.add(task_id)
-            
-            # 先访问依赖
             for dep in dep_graph.get(task_id, []):
                 visit(dep)
-            
             order.append(task_id)
-        
-        # 访问所有任务
+
         for task in subtasks:
             visit(task.id)
-        
+
         return order
 
 
 if __name__ == '__main__':
-    # 测试目标分解器
     logging.basicConfig(level=logging.INFO)
-    
+
     decomposer = GoalDecomposer()
-    
-    # 测试信息收集目标
+
     goal = Goal(
         description="了解量子计算的最新进展",
-        type=GoalType.INFORMATION_GATHERING,
         constraints=["使用可信来源", "时间限制 10 分钟"],
         success_criteria=["获得至少 3 个关键发现"],
-        deadline=None
     )
-    
+
     result = decomposer.decompose(goal)
-    
+
     print(f"\n目标分解结果:")
     print(f"  目标: {result.goal.description}")
+    print(f"  策略: {result.decomposition_strategy}")
     print(f"  子任务数量: {len(result.subtasks)}")
     print(f"  执行顺序: {' -> '.join(result.execution_order)}")
     print(f"  预计时长: {result.estimated_total_duration} 秒")
