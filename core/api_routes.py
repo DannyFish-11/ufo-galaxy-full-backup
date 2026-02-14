@@ -5,17 +5,23 @@ UFO Galaxy - 完整 API 路由模块
 提供 Android 端和 Web UI 需要的所有 REST API 和 WebSocket 端点。
 
 路由分组：
-  /api/v1/system     - 系统状态和管理
-  /api/v1/devices    - 设备注册和管理
-  /api/v1/nodes      - 节点查询和调用
-  /api/v1/command    - 命令路由引擎（并行/串行/超时/重试/聚合）
-  /api/v1/ai         - AI 意图理解 & 智能推荐
-  /api/v1/vision     - 融合视觉理解（OCR + GUI）
-  /api/v1/tasks      - 任务管理
-  /api/v1/chat       - 对话接口
-  /api/v1/monitoring - 监控仪表盘 & 告警
-  /ws/device         - 设备 WebSocket 连接
-  /ws/status         - 状态推送 WebSocket（含 command_result 推送）
+  /api/v1/system      - 系统状态和管理
+  /api/v1/devices     - 设备注册和管理
+  /api/v1/nodes       - 节点查询和调用
+  /api/v1/command     - 命令路由引擎（并行/串行/超时/重试/聚合）
+  /api/v1/ai          - AI 意图理解 & 智能推荐
+  /api/v1/vision      - 融合视觉理解（OCR + GUI）
+  /api/v1/tasks       - 任务管理
+  /api/v1/chat        - 对话接口
+  /api/v1/monitoring  - 监控仪表盘 & 告警
+  /api/v1/health      - 统一健康管理
+  /api/v1/concurrency - 并发管理状态
+  /api/v1/errors      - 错误追踪概览
+  /api/v1/discovery   - 节点发现服务
+  /api/v1/security    - 安全审计 & 统计
+  /api/v1/config      - 配置管理 & 版本历史
+  /ws/device          - 设备 WebSocket 连接
+  /ws/status          - 状态推送 WebSocket（含 command_result 推送）
 """
 
 import asyncio
@@ -1196,6 +1202,120 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         from core.performance import PerformanceMonitor
         perf = PerformanceMonitor.instance()
         return JSONResponse(perf.get_dashboard())
+
+    # ========================================================================
+    # /api/v1/health - 统一健康管理
+    # ========================================================================
+
+    @router.get("/api/v1/health/unified")
+    async def unified_health_dashboard():
+        """统一健康仪表盘（整合所有健康子系统）"""
+        try:
+            from core.health_integration import get_unified_health_manager
+            uhm = get_unified_health_manager()
+            return JSONResponse(uhm.get_dashboard())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.get("/api/v1/health/quick")
+    async def unified_health_quick():
+        """快速健康概览"""
+        try:
+            from core.health_integration import get_unified_health_manager
+            uhm = get_unified_health_manager()
+            return JSONResponse(uhm.get_quick_status())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/concurrency - 并发管理
+    # ========================================================================
+
+    @router.get("/api/v1/concurrency/status")
+    async def concurrency_status():
+        """并发管理器状态"""
+        try:
+            from core.concurrency_manager import get_concurrency_manager
+            mgr = get_concurrency_manager()
+            return JSONResponse(mgr.get_status())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/errors - 错误追踪
+    # ========================================================================
+
+    @router.get("/api/v1/errors/summary")
+    async def error_summary():
+        """错误追踪概览"""
+        try:
+            from core.error_framework import get_error_tracker
+            tracker = get_error_tracker()
+            return JSONResponse(tracker.get_summary())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/discovery - 节点发现
+    # ========================================================================
+
+    @router.get("/api/v1/discovery/status")
+    async def discovery_status():
+        """节点发现服务状态"""
+        try:
+            from core.node_discovery import get_node_discovery
+            disc = get_node_discovery()
+            return JSONResponse(disc.get_status())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/security - 安全审计
+    # ========================================================================
+
+    @router.get("/api/v1/security/audit")
+    async def security_audit_logs():
+        """审计日志（最近 50 条）"""
+        try:
+            from core.security_middleware import get_security_manager
+            sec = get_security_manager()
+            return JSONResponse(sec.audit.get_recent(50))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.get("/api/v1/security/stats")
+    async def security_stats():
+        """安全统计仪表盘"""
+        try:
+            from core.security_middleware import get_security_manager
+            sec = get_security_manager()
+            return JSONResponse(sec.get_dashboard())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/config - 配置管理
+    # ========================================================================
+
+    @router.get("/api/v1/config/status")
+    async def config_manager_status():
+        """配置管理器状态"""
+        try:
+            from core.config_hot_reload import get_config_manager
+            mgr = get_config_manager()
+            return JSONResponse(mgr.get_status())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.get("/api/v1/config/versions")
+    async def config_version_history():
+        """配置版本历史"""
+        try:
+            from core.config_hot_reload import get_config_manager
+            mgr = get_config_manager()
+            return JSONResponse(mgr.versions.get_history(20))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
 
     return router
 

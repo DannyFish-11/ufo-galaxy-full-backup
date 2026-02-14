@@ -162,7 +162,10 @@ class BaseProviderAdapter:
                    max_tokens: int = 4096,
                    response_format: Optional[Dict] = None,
                    **kwargs) -> LLMResponse:
-        raise NotImplementedError
+        raise NotImplementedError(
+            f"Provider adapter '{self.config.name}' 未实现 chat()，"
+            f"请使用具体的适配器子类 (OpenAI/Anthropic/Google/DeepSeek)"
+        )
 
     async def close(self):
         if self._client and not self._client.is_closed:

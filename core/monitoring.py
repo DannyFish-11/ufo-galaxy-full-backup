@@ -203,7 +203,9 @@ class HealthAggregator:
 
     async def check_all(self):
         """执行所有检查"""
-        for name, check_func in self._checks.items():
+        # 使用快照避免迭代时字典被修改导致 RuntimeError
+        checks_snapshot = list(self._checks.items())
+        for name, check_func in checks_snapshot:
             await self._run_check(name, check_func)
 
     async def _run_check(self, name: str, check_func: Callable):
