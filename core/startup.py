@@ -124,6 +124,42 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"并发管理器启动失败: {e}")
 
     # ====================================================================
+    # 2d. 配置热更新管理器
+    # ====================================================================
+    try:
+        from core.config_hot_reload import get_config_manager
+
+        config_path = os.environ.get(
+            "UFO_CONFIG_PATH",
+            os.path.join(os.path.dirname(os.path.dirname(__file__)), "config", "unified_config.json"),
+        )
+        config_mgr = get_config_manager(config_path=config_path)
+        if os.path.exists(config_path):
+            errors = config_mgr.load_from_file()
+            if errors:
+                logger.warning(f"配置加载有误: {errors}")
+            await config_mgr.start_watching()
+        results["config_hot_reload"] = {"status": "ok", "path": config_path}
+        logger.info(f"配置热更新管理器已启动: {config_path}")
+    except Exception as e:
+        results["config_hot_reload"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"配置热更新管理器启动失败: {e}")
+
+    # ====================================================================
+    # 2e. 安全中间件
+    # ====================================================================
+    try:
+        from core.security_middleware import get_security_manager
+
+        security_mgr = get_security_manager()
+        security_mgr.setup_middleware(app)
+        results["security_middleware"] = {"status": "ok"}
+        logger.info("安全中间件已安装 (审计日志 + 安全头 + IP 黑名单)")
+    except Exception as e:
+        results["security_middleware"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"安全中间件安装失败: {e}")
+
+    # ====================================================================
     # 3. 性能中间件链
     # ====================================================================
     try:
@@ -444,6 +480,15 @@ async def shutdown_subsystems():
         logger.info("并发管理器已停止")
     except Exception as e:
         logger.warning(f"并发管理器停止失败: {e}")
+
+    # 3c. 配置热更新管理器
+    try:
+        from core.config_hot_reload import get_config_manager
+        config_mgr = get_config_manager()
+        await config_mgr.stop_watching()
+        logger.info("配置热更新已停止")
+    except Exception as e:
+        logger.warning(f"配置热更新停止失败: {e}")
 
     # 4. 缓存
     try:
