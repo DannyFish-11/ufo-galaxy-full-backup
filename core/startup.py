@@ -6,16 +6,21 @@ UFO Galaxy - 系统启动引导
 
 初始化顺序：
   1. 缓存层（Redis / 内存降级）
-  2. 监控系统（健康检查、告警、指标）
-  3. 性能中间件（压缩、限流、缓存、计时）
-  4. 命令路由引擎
-  5. AI 意图引擎（解析器、记忆、推荐）
-  6. 向量数据库（Qdrant）
-  7. 事件桥接（EventBus ↔ 所有子系统）
-  8. 多 LLM 智能路由器
-  9. 动态 Agent 工厂 + 分形执行器
-  10. 数字孪生引擎
-  11. 三位一体世界模型
+  2. 统一错误处理框架
+  3. 并发管理器
+  4. 监控系统（健康检查、告警、指标）
+  5. 性能中间件（压缩、限流、缓存、计时）
+  6. 命令路由引擎
+  7. AI 意图引擎（解析器、记忆、推荐）
+  8. 向量数据库（Qdrant）
+  9. 事件桥接（EventBus ↔ 所有子系统）
+  10. 多 LLM 智能路由器
+  11. 动态 Agent 工厂 + 分形执行器
+  12. 数字孪生引擎
+  13. 三位一体世界模型
+  14. 节点发现服务
+  15. 健康检查整合层
+  16. Galaxy Gateway
 
 所有模块均支持优雅降级：缺少 Redis → 内存缓存，缺少 LLM → 规则引擎。
 """
@@ -85,6 +90,38 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
     except Exception as e:
         results["monitoring"] = {"status": "degraded", "error": str(e)}
         logger.warning(f"监控系统启动失败: {e}")
+
+    # ====================================================================
+    # 2b. 统一错误处理框架
+    # ====================================================================
+    error_tracker = None
+    try:
+        from core.error_framework import get_error_tracker, create_error_handlers
+
+        error_tracker = get_error_tracker()
+        create_error_handlers(app)
+        results["error_framework"] = {"status": "ok"}
+        logger.info("统一错误处理框架已初始化")
+    except Exception as e:
+        results["error_framework"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"错误处理框架初始化失败: {e}")
+
+    # ====================================================================
+    # 2c. 并发管理器
+    # ====================================================================
+    concurrency_mgr = None
+    try:
+        from core.concurrency_manager import get_concurrency_manager
+
+        concurrency_mgr = get_concurrency_manager(
+            global_max=int(os.environ.get("CONCURRENCY_GLOBAL_MAX", "50")),
+        )
+        await concurrency_mgr.start()
+        results["concurrency_manager"] = {"status": "ok"}
+        logger.info("并发管理器已启动")
+    except Exception as e:
+        results["concurrency_manager"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"并发管理器启动失败: {e}")
 
     # ====================================================================
     # 3. 性能中间件链
@@ -259,7 +296,55 @@ async def bootstrap_subsystems(app: FastAPI, config: Any = None) -> dict:
         logger.warning(f"世界模型初始化失败: {e}")
 
     # ====================================================================
-    # 12. Galaxy Gateway 挂载（作为子应用）
+    # 14. 节点发现服务
+    # ====================================================================
+    discovery = None
+    try:
+        from core.node_discovery import get_node_discovery
+
+        node_id = os.environ.get("UFO_NODE_ID", "master")
+        discovery = get_node_discovery(node_id=node_id)
+        await discovery.start()
+        results["node_discovery"] = {"status": "ok", "node_id": node_id}
+        logger.info(f"节点发现服务已启动: {node_id}")
+    except Exception as e:
+        results["node_discovery"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"节点发现服务启动失败: {e}")
+
+    # ====================================================================
+    # 15. 健康检查整合层
+    # ====================================================================
+    try:
+        from core.health_integration import get_unified_health_manager
+        from core.system_load_monitor import get_monitor as get_load_monitor
+
+        load_monitor = get_load_monitor()
+        uhm = get_unified_health_manager()
+
+        # 获取上面已初始化的 monitoring 实例（可能为 None）
+        _monitoring = None
+        try:
+            from core.monitoring import get_monitoring_manager
+            _monitoring = get_monitoring_manager()
+        except Exception:
+            pass
+
+        uhm.wire(
+            monitoring=_monitoring,
+            load_monitor=load_monitor,
+            error_tracker=error_tracker,
+            concurrency=concurrency_mgr,
+            discovery=discovery,
+        )
+        await uhm.start()
+        results["health_integration"] = {"status": "ok"}
+        logger.info("健康检查整合层已启动")
+    except Exception as e:
+        results["health_integration"] = {"status": "degraded", "error": str(e)}
+        logger.warning(f"健康检查整合层启动失败: {e}")
+
+    # ====================================================================
+    # 16. Galaxy Gateway 挂载（作为子应用）
     # ====================================================================
     try:
         from galaxy_gateway.app import app as gateway_app
@@ -284,11 +369,29 @@ async def shutdown_subsystems():
     """
     优雅关闭所有核心子系统
 
-    调用顺序与启动相反：事件桥 → AI → 命令路由 → 监控 → 缓存
+    调用顺序与启动相反。
     """
     logger.info("开始关闭核心子系统...")
 
-    # 0. 数字孪生引擎
+    # 0a. 健康检查整合层
+    try:
+        from core.health_integration import get_unified_health_manager
+        uhm = get_unified_health_manager()
+        await uhm.stop()
+        logger.info("健康检查整合层已停止")
+    except Exception as e:
+        logger.warning(f"健康检查整合层停止失败: {e}")
+
+    # 0b. 节点发现服务
+    try:
+        from core.node_discovery import get_node_discovery
+        discovery = get_node_discovery()
+        await discovery.stop()
+        logger.info("节点发现服务已停止")
+    except Exception as e:
+        logger.warning(f"节点发现服务停止失败: {e}")
+
+    # 0c. 数字孪生引擎
     try:
         from core.digital_twin_engine import get_digital_twin_engine
         twin_engine = get_digital_twin_engine()
@@ -332,6 +435,15 @@ async def shutdown_subsystems():
         logger.info("监控系统已停止")
     except Exception as e:
         logger.warning(f"监控系统关闭失败: {e}")
+
+    # 3b. 并发管理器
+    try:
+        from core.concurrency_manager import get_concurrency_manager
+        concurrency = get_concurrency_manager()
+        await concurrency.stop()
+        logger.info("并发管理器已停止")
+    except Exception as e:
+        logger.warning(f"并发管理器停止失败: {e}")
 
     # 4. 缓存
     try:
