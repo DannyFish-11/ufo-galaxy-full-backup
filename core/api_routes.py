@@ -5,14 +5,23 @@ UFO Galaxy - 完整 API 路由模块
 提供 Android 端和 Web UI 需要的所有 REST API 和 WebSocket 端点。
 
 路由分组：
-  /api/v1/system     - 系统状态和管理
-  /api/v1/devices    - 设备注册和管理
-  /api/v1/nodes      - 节点查询和调用
-  /api/v1/vision     - 融合视觉理解（OCR + GUI）
-  /api/v1/tasks      - 任务管理
-  /api/v1/chat       - 对话接口
-  /ws/device         - 设备 WebSocket 连接
-  /ws/status         - 状态推送 WebSocket
+  /api/v1/system      - 系统状态和管理
+  /api/v1/devices     - 设备注册和管理
+  /api/v1/nodes       - 节点查询和调用
+  /api/v1/command     - 命令路由引擎（并行/串行/超时/重试/聚合）
+  /api/v1/ai          - AI 意图理解 & 智能推荐
+  /api/v1/vision      - 融合视觉理解（OCR + GUI）
+  /api/v1/tasks       - 任务管理
+  /api/v1/chat        - 对话接口
+  /api/v1/monitoring  - 监控仪表盘 & 告警
+  /api/v1/health      - 统一健康管理
+  /api/v1/concurrency - 并发管理状态
+  /api/v1/errors      - 错误追踪概览
+  /api/v1/discovery   - 节点发现服务
+  /api/v1/security    - 安全审计 & 统计
+  /api/v1/config      - 配置管理 & 版本历史
+  /ws/device          - 设备 WebSocket 连接
+  /ws/status          - 状态推送 WebSocket（含 command_result 推送）
 """
 
 import asyncio
@@ -84,6 +93,35 @@ class OCRRequest(BaseModel):
     image_base64: str
     mode: str = "free_ocr"
     language: str = "auto"
+
+
+class CommandDispatchRequest(BaseModel):
+    """命令分发请求"""
+    source: str = "api"
+    targets: List[str] = []
+    command: str
+    params: Dict[str, Any] = {}
+    mode: str = "sync"   # sync | async | parallel | serial
+    timeout: float = 30.0
+    max_retries: int = 2
+    notify_ws: bool = True
+    priority: int = 5
+    metadata: Dict[str, Any] = {}
+
+
+class AIIntentRequest(BaseModel):
+    """AI 意图解析请求"""
+    text: str
+    session_id: str = ""
+    context: Dict[str, Any] = {}
+
+
+class ConversationRequest(BaseModel):
+    """对话记忆请求"""
+    session_id: str
+    role: str = "user"
+    content: str
+    metadata: Dict[str, Any] = {}
 
 
 # ============================================================================
@@ -190,6 +228,20 @@ class ConnectionManager:
                 disconnected.append(ws)
         for ws in disconnected:
             self.status_subscribers.discard(ws)
+
+    async def push_command_result(self, command_result_dict: dict):
+        """推送命令执行结果到所有 status 订阅者和相关设备"""
+        payload = {
+            "type": "command_result",
+            "data": command_result_dict,
+            "timestamp": datetime.now().isoformat(),
+        }
+        # 推送给 status 订阅者
+        await self.broadcast_status(payload)
+        # 推送给涉及的设备
+        for target in command_result_dict.get("targets", {}).keys():
+            if target in self.active_devices:
+                await self.send_to_device(target, payload)
 
 
 # ============================================================================
@@ -615,9 +667,9 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 executed_tasks = []
                 if "唤醒" in req.instruction:
                     for did in registered_devices:
-                        await connection_manager.send_personal_message(
+                        await connection_manager.send_to_device(
+                            did,
                             {"type": "task", "task_type": "wake_up", "payload": {"msg": req.instruction}},
-                            did
                         )
                         executed_tasks.append(f"Waking up device {did}")
                     return {
@@ -1165,35 +1217,56 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
-        """对话接口 - 调用 LLM 处理用户消息"""
+        """
+        对话接口 - 调用 LLM 处理用户消息
+
+        融合对话记忆：自动保存上下文，支持连续对话
+        """
         try:
+            # === 融合对话记忆 ===
+            session_id = req.device_id or "default"
+            try:
+                from core.ai_intent import get_conversation_memory
+                memory = get_conversation_memory()
+                # 记录用户消息
+                await memory.add_turn(session_id, "user", req.message)
+                # 获取历史上下文（如果请求中没有）
+                if not req.context:
+                    req.context = await memory.get_context(session_id, max_turns=10)
+            except Exception:
+                pass
+
             # 尝试使用 OpenAI API
             api_key = os.environ.get("OPENAI_API_KEY", "")
             api_base = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
-            
+
             if not api_key:
                 # 尝试 Gemini
                 gemini_key = os.environ.get("GEMINI_API_KEY", "")
                 if gemini_key:
-                    return await _chat_with_gemini(req, gemini_key)
-                
+                    result = await _chat_with_gemini(req, gemini_key)
+                    await _save_reply(session_id, result)
+                    return result
+
                 # 尝试 OpenRouter
                 or_key = os.environ.get("OPENROUTER_API_KEY", "")
                 if or_key:
-                    return await _chat_with_openrouter(req, or_key)
-                
+                    result = await _chat_with_openrouter(req, or_key)
+                    await _save_reply(session_id, result)
+                    return result
+
                 return JSONResponse({
                     "success": False,
                     "error": "未配置 LLM API Key",
                     "reply": "抱歉，LLM 服务未配置。请在 .env 文件中设置 API Key。"
                 })
-            
+
             import httpx
             messages = [{"role": "system", "content": "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
             for ctx in req.context[-10:]:
                 messages.append(ctx)
             messages.append({"role": "user", "content": req.message})
-            
+
             async with httpx.AsyncClient(timeout=60) as client:
                 resp = await client.post(
                     f"{api_base}/chat/completions",
@@ -1207,14 +1280,23 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 resp.raise_for_status()
                 data = resp.json()
                 reply = data["choices"][0]["message"]["content"]
-                
+
+                # 记录助手回复到记忆
+                try:
+                    from core.ai_intent import get_conversation_memory
+                    memory = get_conversation_memory()
+                    await memory.add_turn(session_id, "assistant", reply)
+                except Exception:
+                    pass
+
                 return JSONResponse({
                     "success": True,
                     "reply": reply,
                     "model": data.get("model", ""),
-                    "usage": data.get("usage", {})
+                    "usage": data.get("usage", {}),
+                    "session_id": session_id,
                 })
-                
+
         except Exception as e:
             logger.error(f"对话失败: {e}")
             return JSONResponse({
@@ -1222,7 +1304,373 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 "error": str(e),
                 "reply": f"处理消息时出错: {str(e)}"
             })
+
+    async def _save_reply(session_id: str, response: JSONResponse):
+        """保存 LLM 回复到对话记忆"""
+        try:
+            from core.ai_intent import get_conversation_memory
+            memory = get_conversation_memory()
+            # 从 JSONResponse 提取 reply
+            import json as _json
+            body = response.body.decode() if hasattr(response, 'body') else ""
+            if body:
+                data = _json.loads(body)
+                if data.get("reply"):
+                    await memory.add_turn(session_id, "assistant", data["reply"])
+        except Exception:
+            pass
     
+    # ========================================================================
+    # /api/v1/command - 命令路由引擎
+    # ========================================================================
+
+    from core.command_router import (
+        CommandRouter, CommandRequest, CommandMode, CommandStatus, get_command_router,
+    )
+
+    # 初始化命令路由器，绑定 WebSocket 推送回调
+    async def _on_command_status_change(cmd_result):
+        """命令状态变更 → WebSocket 推送"""
+        try:
+            await connection_manager.push_command_result(cmd_result.to_dict())
+        except Exception as e:
+            logger.error(f"Command result push failed: {e}")
+
+    command_router = get_command_router(on_status_change=_on_command_status_change)
+
+    # 设置节点执行器
+    async def _command_node_executor(target: str, command: str, params: dict):
+        """命令路由 → 节点执行桥接"""
+        target_node_dir = os.path.join(nodes_root, target)
+        if not os.path.isdir(target_node_dir):
+            # 模糊匹配
+            for name in os.listdir(nodes_root):
+                if name.startswith(target) or target in name:
+                    target_node_dir = os.path.join(nodes_root, name)
+                    target = name
+                    break
+
+        if not os.path.isdir(target_node_dir):
+            # 可能是设备目标
+            if target in connection_manager.active_devices:
+                sent = await connection_manager.send_to_device(target, {
+                    "type": "command",
+                    "command": command,
+                    "params": params,
+                })
+                return {"sent_to_device": target, "success": sent}
+            return {"error": f"Target {target} not found"}
+
+        fusion_entry = os.path.join(target_node_dir, "fusion_entry.py")
+        if not os.path.exists(fusion_entry):
+            return {"error": f"Target {target} has no fusion_entry.py"}
+
+        node_instance = _load_node(target, target_node_dir, fusion_entry)
+        if not node_instance:
+            return {"error": f"Failed to load target {target}"}
+
+        return await _execute_node(node_instance, command, params)
+
+    command_router.set_executor(_command_node_executor)
+
+    @router.post("/api/v1/command")
+    async def dispatch_command(req: CommandDispatchRequest):
+        """
+        命令分发接口
+
+        支持模式：
+          - sync: 同步等待所有目标返回
+          - async: 立即返回 request_id，后台执行
+          - parallel: 多目标并行执行
+          - serial: 多目标串行执行
+
+        WebSocket 实时推送：当 notify_ws=true 时，结果通过 /ws/status 推送
+        """
+        cmd_request = CommandRequest(
+            source=req.source,
+            targets=req.targets if req.targets else ["system"],
+            command=req.command,
+            params=req.params,
+            mode=CommandMode(req.mode),
+            timeout=req.timeout,
+            max_retries=req.max_retries,
+            notify_ws=req.notify_ws,
+            priority=req.priority,
+            metadata=req.metadata,
+        )
+
+        try:
+            result = await command_router.dispatch(cmd_request)
+            return JSONResponse({
+                "success": result.status.value in ("success", "partial"),
+                **result.to_dict(),
+            })
+        except Exception as e:
+            logger.error(f"Command dispatch failed: {e}")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @router.get("/api/v1/command/{request_id}")
+    async def get_command_status(request_id: str):
+        """查询命令执行状态和聚合结果"""
+        result = await command_router.get_result(request_id)
+        if not result:
+            raise HTTPException(status_code=404, detail=f"Command {request_id} not found")
+        return JSONResponse(result.to_dict())
+
+    @router.delete("/api/v1/command/{request_id}")
+    async def cancel_command(request_id: str):
+        """取消正在执行的命令"""
+        cancelled = await command_router.cancel(request_id)
+        if not cancelled:
+            raise HTTPException(status_code=404, detail="Command not found or already completed")
+        return JSONResponse({"success": True, "message": f"Command {request_id} cancelled"})
+
+    @router.get("/api/v1/command")
+    async def command_stats():
+        """获取命令路由引擎统计"""
+        return JSONResponse(command_router.get_stats())
+
+    # ========================================================================
+    # /api/v1/ai - AI 意图理解 & 智能推荐
+    # ========================================================================
+
+    from core.ai_intent import (
+        get_intent_parser, get_conversation_memory, get_smart_recommender,
+    )
+
+    intent_parser = get_intent_parser()
+    conversation_memory = get_conversation_memory()
+    smart_recommender = get_smart_recommender()
+
+    @router.post("/api/v1/ai/intent")
+    async def parse_intent(req: AIIntentRequest):
+        """
+        AI 意图解析
+
+        自然语言 → 结构化命令
+        双级解析：规则引擎 (< 1ms) + LLM (高精度)
+        """
+        context = req.context
+        if req.session_id:
+            history = await conversation_memory.get_context(req.session_id)
+            context["history"] = history
+
+        parsed = await intent_parser.parse(req.text, context)
+        return JSONResponse({
+            "success": True,
+            **parsed.to_dict(),
+        })
+
+    @router.post("/api/v1/ai/conversation")
+    async def manage_conversation(req: ConversationRequest):
+        """添加对话轮次到记忆系统"""
+        await conversation_memory.add_turn(
+            session_id=req.session_id,
+            role=req.role,
+            content=req.content,
+            metadata=req.metadata,
+        )
+        return JSONResponse({
+            "success": True,
+            "session_id": req.session_id,
+            "turns": len(await conversation_memory.get_context(req.session_id, max_turns=100)),
+        })
+
+    @router.get("/api/v1/ai/conversation/{session_id}")
+    async def get_conversation_context(session_id: str, max_turns: int = 10):
+        """获取对话上下文"""
+        context = await conversation_memory.get_context(session_id, max_turns)
+        summary = await conversation_memory.get_summary(session_id)
+        return JSONResponse({
+            "session_id": session_id,
+            "context": context,
+            "summary": summary,
+        })
+
+    @router.get("/api/v1/ai/recommendations/{session_id}")
+    async def get_recommendations(session_id: str):
+        """获取智能推荐"""
+        current_context = {
+            "devices": registered_devices,
+            "tasks": {k: v.get("status") for k, v in task_queue.items()},
+        }
+        recs = await smart_recommender.get_recommendations(session_id, current_context)
+        return JSONResponse({
+            "session_id": session_id,
+            "recommendations": recs,
+        })
+
+    @router.delete("/api/v1/ai/conversation/{session_id}")
+    async def clear_conversation(session_id: str):
+        """清除对话记忆"""
+        await conversation_memory.clear_session(session_id)
+        return JSONResponse({"success": True, "message": f"Session {session_id} cleared"})
+
+    # ========================================================================
+    # /api/v1/monitoring - 监控仪表盘 & 告警
+    # ========================================================================
+
+    from core.monitoring import get_monitoring_manager, AlertSeverity
+
+    monitoring = get_monitoring_manager()
+
+    # 注册默认健康检查
+    monitoring.health.register_check("api", lambda: {"status": "healthy"})
+    monitoring.health.register_check("cache", lambda: {
+        "status": "healthy",
+        "backend": "memory",
+    })
+
+    @router.get("/api/v1/monitoring/dashboard")
+    async def monitoring_dashboard():
+        """完整监控仪表盘"""
+        from core.performance import PerformanceMonitor
+        perf = PerformanceMonitor.instance()
+
+        dashboard = monitoring.get_full_dashboard()
+        dashboard["performance"] = perf.get_dashboard()
+        dashboard["command_router"] = command_router.get_stats()
+        return JSONResponse(dashboard)
+
+    @router.get("/api/v1/monitoring/health")
+    async def monitoring_health():
+        """健康检查聚合"""
+        return JSONResponse(monitoring.health.get_status())
+
+    @router.get("/api/v1/monitoring/alerts")
+    async def monitoring_alerts():
+        """告警列表"""
+        return JSONResponse({
+            "active": monitoring.alerts.get_active_alerts(),
+            "history": monitoring.alerts.get_history(50),
+        })
+
+    @router.get("/api/v1/monitoring/metrics")
+    async def monitoring_metrics():
+        """系统指标"""
+        return JSONResponse(monitoring.metrics.get_dashboard())
+
+    @router.get("/api/v1/monitoring/performance")
+    async def monitoring_performance():
+        """性能指标仪表盘"""
+        from core.performance import PerformanceMonitor
+        perf = PerformanceMonitor.instance()
+        return JSONResponse(perf.get_dashboard())
+
+    # ========================================================================
+    # /api/v1/health - 统一健康管理
+    # ========================================================================
+
+    @router.get("/api/v1/health/unified")
+    async def unified_health_dashboard():
+        """统一健康仪表盘（整合所有健康子系统）"""
+        try:
+            from core.health_integration import get_unified_health_manager
+            uhm = get_unified_health_manager()
+            return JSONResponse(uhm.get_dashboard())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.get("/api/v1/health/quick")
+    async def unified_health_quick():
+        """快速健康概览"""
+        try:
+            from core.health_integration import get_unified_health_manager
+            uhm = get_unified_health_manager()
+            return JSONResponse(uhm.get_quick_status())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/concurrency - 并发管理
+    # ========================================================================
+
+    @router.get("/api/v1/concurrency/status")
+    async def concurrency_status():
+        """并发管理器状态"""
+        try:
+            from core.concurrency_manager import get_concurrency_manager
+            mgr = get_concurrency_manager()
+            return JSONResponse(mgr.get_status())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/errors - 错误追踪
+    # ========================================================================
+
+    @router.get("/api/v1/errors/summary")
+    async def error_summary():
+        """错误追踪概览"""
+        try:
+            from core.error_framework import get_error_tracker
+            tracker = get_error_tracker()
+            return JSONResponse(tracker.get_summary())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/discovery - 节点发现
+    # ========================================================================
+
+    @router.get("/api/v1/discovery/status")
+    async def discovery_status():
+        """节点发现服务状态"""
+        try:
+            from core.node_discovery import get_node_discovery
+            disc = get_node_discovery()
+            return JSONResponse(disc.get_status())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/security - 安全审计
+    # ========================================================================
+
+    @router.get("/api/v1/security/audit")
+    async def security_audit_logs():
+        """审计日志（最近 50 条）"""
+        try:
+            from core.security_middleware import get_security_manager
+            sec = get_security_manager()
+            return JSONResponse(sec.audit.get_recent(50))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.get("/api/v1/security/stats")
+    async def security_stats():
+        """安全统计仪表盘"""
+        try:
+            from core.security_middleware import get_security_manager
+            sec = get_security_manager()
+            return JSONResponse(sec.get_dashboard())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    # ========================================================================
+    # /api/v1/config - 配置管理
+    # ========================================================================
+
+    @router.get("/api/v1/config/status")
+    async def config_manager_status():
+        """配置管理器状态"""
+        try:
+            from core.config_hot_reload import get_config_manager
+            mgr = get_config_manager()
+            return JSONResponse(mgr.get_status())
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
+    @router.get("/api/v1/config/versions")
+    async def config_version_history():
+        """配置版本历史"""
+        try:
+            from core.config_hot_reload import get_config_manager
+            mgr = get_config_manager()
+            return JSONResponse(mgr.versions.get_history(20))
+        except Exception as e:
+            return JSONResponse({"error": str(e)}, status_code=500)
+
     return router
 
 
@@ -1408,6 +1856,53 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                             "reply": f"处理消息时出错: {str(e)}"
                         })
                 
+                elif msg_type == "command_dispatch":
+                    # 通过 WebSocket 分发命令
+                    try:
+                        from core.command_router import (
+                            CommandRequest, CommandMode, get_command_router,
+                        )
+                        cmd_router = get_command_router()
+                        cmd_req = CommandRequest(
+                            source=f"ws:{device_id}",
+                            targets=data.get("targets", []),
+                            command=data.get("command", ""),
+                            params=data.get("params", {}),
+                            mode=CommandMode(data.get("mode", "sync")),
+                            timeout=data.get("timeout", 30.0),
+                            notify_ws=True,
+                        )
+                        result = await cmd_router.dispatch(cmd_req)
+                        await websocket.send_json({
+                            "type": "command_result",
+                            "request_id": result.request_id,
+                            "data": result.to_dict(),
+                        })
+                    except Exception as e:
+                        await websocket.send_json({
+                            "type": "command_error",
+                            "request_id": data.get("request_id", ""),
+                            "error": str(e),
+                        })
+
+                elif msg_type == "ai_intent":
+                    # 通过 WebSocket 调用 AI 意图解析
+                    try:
+                        from core.ai_intent import get_intent_parser
+                        parser = get_intent_parser()
+                        parsed = await parser.parse(data.get("text", ""))
+                        await websocket.send_json({
+                            "type": "ai_intent_result",
+                            "request_id": data.get("request_id", ""),
+                            **parsed.to_dict(),
+                        })
+                    except Exception as e:
+                        await websocket.send_json({
+                            "type": "ai_intent_error",
+                            "request_id": data.get("request_id", ""),
+                            "error": str(e),
+                        })
+
                 else:
                     # 未知消息类型
                     logger.warning(f"未知消息类型: {msg_type} from {device_id}")
@@ -1431,7 +1926,20 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     
     @app.websocket("/ws/status")
     async def status_websocket(websocket: WebSocket):
-        """状态推送 WebSocket - 订阅系统状态变更"""
+        """
+        状态推送 WebSocket - 订阅系统状态变更
+
+        自动接收的推送类型：
+          - device_connected / device_disconnected
+          - device_status_update
+          - command_result (命令执行结果)
+          - initial_status (连接时的快照)
+
+        客户端可发送：
+          - "ping" → 返回 "pong"
+          - JSON {"type": "subscribe_commands"} → 确认订阅命令结果
+          - JSON {"type": "get_metrics"} → 返回性能指标
+        """
         await connection_manager.subscribe_status(websocket)
         try:
             # 发送当前状态
@@ -1441,15 +1949,49 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
                 "devices_registered": len(registered_devices),
                 "timestamp": datetime.now().isoformat()
             })
-            
+
             while True:
                 # 保持连接，等待客户端消息
-                data = await websocket.receive_text()
-                if data == "ping":
+                raw = await websocket.receive_text()
+                if raw == "ping":
                     await websocket.send_json({
                         "type": "pong",
                         "timestamp": datetime.now().isoformat()
                     })
+                else:
+                    # 尝试解析 JSON 消息
+                    try:
+                        msg = json.loads(raw)
+                        msg_type = msg.get("type", "")
+
+                        if msg_type == "subscribe_commands":
+                            await websocket.send_json({
+                                "type": "subscribed",
+                                "channel": "command_results",
+                                "timestamp": datetime.now().isoformat(),
+                            })
+
+                        elif msg_type == "get_metrics":
+                            from core.performance import PerformanceMonitor
+                            perf = PerformanceMonitor.instance()
+                            await websocket.send_json({
+                                "type": "metrics",
+                                "data": perf.get_dashboard(),
+                                "timestamp": datetime.now().isoformat(),
+                            })
+
+                        elif msg_type == "get_health":
+                            from core.monitoring import get_monitoring_manager
+                            mon = get_monitoring_manager()
+                            await websocket.send_json({
+                                "type": "health",
+                                "data": mon.health.get_status(),
+                                "timestamp": datetime.now().isoformat(),
+                            })
+
+                    except (json.JSONDecodeError, ValueError):
+                        pass
+
         except WebSocketDisconnect:
             connection_manager.unsubscribe_status(websocket)
         except Exception:
