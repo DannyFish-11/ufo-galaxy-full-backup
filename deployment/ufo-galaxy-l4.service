@@ -4,9 +4,9 @@ After=network.target
 
 [Service]
 Type=simple
-User=ubuntu
-WorkingDirectory=/home/ubuntu/code_audit/ufo-galaxy-realization
-ExecStart=/usr/bin/python3 /home/ubuntu/code_audit/ufo-galaxy-realization/start_l4.py
+User=galaxy
+WorkingDirectory=/app
+ExecStart=/usr/bin/python3 /app/start_l4.py
 Restart=always
 RestartSec=10
 StandardOutput=journal
@@ -14,6 +14,7 @@ StandardError=journal
 
 # 环境变量
 Environment="PYTHONUNBUFFERED=1"
+Environment="PYTHONPATH=/app"
 
 [Install]
 WantedBy=multi-user.target

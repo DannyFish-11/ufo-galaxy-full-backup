@@ -8,7 +8,8 @@ import sys
 import logging
 
 # 添加路径
-sys.path.insert(0, '/home/ubuntu/code_audit/ufo-galaxy-realization')
+import os
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 from enhancements.perception.environment_scanner import EnvironmentScanner
 from enhancements.reasoning.goal_decomposer import GoalDecomposer, Goal, GoalType

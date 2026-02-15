@@ -60,13 +60,15 @@ class CodingResult:
 class AutonomousCodingEngine:
     """自主编程引擎"""
     
-    def __init__(self, workspace_root: str = "/home/ubuntu/code_audit/ufo-galaxy-realization"):
+    def __init__(self, workspace_root: str = None):
         """
         初始化自主编程引擎
-        
+
         Args:
             workspace_root: 工作空间根目录
         """
+        if workspace_root is None:
+            workspace_root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
         self.workspace_root = workspace_root
         self.available_tools = self._scan_available_tools()
         self.coding_history: List[Dict] = []
@@ -307,7 +309,7 @@ class NewFeature:
 
 import pytest
 import sys
-sys.path.insert(0, '/home/ubuntu/code_audit/ufo-galaxy-realization')
+sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
 
 from {module_name} import *
 

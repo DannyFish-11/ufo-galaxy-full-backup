@@ -108,7 +108,7 @@ class AutoGitUpdater:
         default_repos = [
             {
                 'name': 'ufo-galaxy-realization',
-                'path': '/home/ubuntu/code_audit/ufo-galaxy-realization',
+                'path': os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))),
                 'remote': 'origin',
                 'branch': 'main',
                 'auto_update': True,
