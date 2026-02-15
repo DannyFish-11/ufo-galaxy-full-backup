@@ -1,0 +1,50 @@
+{
+  "daemon_name": "UFO Galaxy 24/7 Daemon",
+  "version": "1.0.0",
+  "health_check_interval": 30,
+  "metrics_collection_interval": 60,
+  "max_restarts_per_hour": 10,
+  "memory_threshold": 90,
+  "cpu_threshold": 95,
+  "disk_threshold": 90,
+  "watchdog_enabled": true,
+  "watchdog_timeout": 120,
+  "auto_restart": true,
+  "services": {
+    "galaxy_main": {
+      "command": ["python", "-m", "galaxy_launcher", "--daemon"],
+      "restart_policy": "always",
+      "max_restarts": 10,
+      "health_check_url": "http://localhost:8080/health"
+    },
+    "health_monitor": {
+      "command": ["python", "-m", "health_monitor", "--watchdog", "--interval", "30"],
+      "restart_policy": "always",
+      "max_restarts": 20
+    },
+    "hardware_monitor": {
+      "command": ["python", "-m", "hardware.hardware_monitor"],
+      "restart_policy": "always",
+      "max_restarts": 10
+    }
+  },
+  "logging": {
+    "level": "INFO",
+    "file": "/var/log/ufo-galaxy/daemon.log",
+    "max_size_mb": 100,
+    "backup_count": 10
+  },
+  "notifications": {
+    "enabled": false,
+    "webhook_url": "",
+    "email": {
+      "enabled": false,
+      "smtp_server": "",
+      "smtp_port": 587,
+      "username": "",
+      "password": "",
+      "from_addr": "",
+      "to_addrs": []
+    }
+  }
+}
