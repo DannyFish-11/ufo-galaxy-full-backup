@@ -12,13 +12,13 @@
   "auto_restart": true,
   "services": {
     "galaxy_main": {
-      "command": ["python", "-m", "galaxy_launcher", "--daemon"],
+      "command": ["python", "unified_launcher.py", "--port", "8080"],
       "restart_policy": "always",
       "max_restarts": 10,
-      "health_check_url": "http://localhost:8080/health"
+      "health_check_url": "http://localhost:8080/api/health"
     },
     "health_monitor": {
-      "command": ["python", "-m", "health_monitor", "--watchdog", "--interval", "30"],
+      "command": ["python", "health_monitor.py"],
       "restart_policy": "always",
       "max_restarts": 20
     },
@@ -30,7 +30,7 @@
   },
   "logging": {
     "level": "INFO",
-    "file": "/var/log/ufo-galaxy/daemon.log",
+    "file": "logs/daemon.log",
     "max_size_mb": 100,
     "backup_count": 10
   },

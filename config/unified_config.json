@@ -344,7 +344,7 @@
       "description": "日历服务",
       "health_endpoint": "/health"
     },
-    "Node_23_Time_Time": {
+    "Node_23_Time": {
       "port": 8123,
       "group": "tools",
       "priority": 2,
@@ -380,7 +380,7 @@
       "description": "Google搜索",
       "health_endpoint": "/health"
     },
-    "Node_28_Reserved28": {
+    "Node_28_Reserved": {
       "port": 8028,
       "group": "tools",
       "priority": 2,
@@ -390,7 +390,7 @@
       "description": "保留节点28",
       "health_endpoint": "/health"
     },
-    "Node_29_Reserved29": {
+    "Node_29_Reserved": {
       "port": 8029,
       "group": "tools",
       "priority": 2,
@@ -400,7 +400,7 @@
       "description": "保留节点29",
       "health_endpoint": "/health"
     },
-    "Node_30_Reserved30": {
+    "Node_30_Reserved": {
       "port": 8030,
       "group": "tools",
       "priority": 2,
@@ -410,7 +410,7 @@
       "description": "保留节点30",
       "health_endpoint": "/health"
     },
-    "Node_31_Reserved31": {
+    "Node_31_Reserved": {
       "port": 8031,
       "group": "tools",
       "priority": 2,
@@ -420,7 +420,7 @@
       "description": "保留节点31",
       "health_endpoint": "/health"
     },
-    "Node_32_Reserved32": {
+    "Node_32_Reserved": {
       "port": 8032,
       "group": "tools",
       "priority": 2,
@@ -610,7 +610,7 @@
       "description": "音频控制",
       "health_endpoint": "/health"
     },
-    "Node_48_MediaGen_MediaGen": {
+    "Node_48_MediaGen": {
       "port": 8048,
       "group": "physical",
       "priority": 3,
@@ -622,7 +622,7 @@
       "description": "媒体生成",
       "health_endpoint": "/health"
     },
-    "Node_48_Serial_Serial": {
+    "Node_48_Serial": {
       "port": 8049,
       "group": "physical",
       "priority": 3,
@@ -718,7 +718,7 @@
       "description": "智能体集群",
       "health_endpoint": "/health"
     },
-    "Node_56_Planning_Planning": {
+    "Node_56_Planning": {
       "port": 8057,
       "group": "intelligence",
       "priority": 4,
@@ -1070,7 +1070,7 @@
       "description": "学术搜索",
       "health_endpoint": "/health"
     },
-    "Node_100_MemorySystemV2": {
+    "Node_100_MemorySystem": {
       "port": 8100,
       "group": "academic",
       "priority": 9,

@@ -425,7 +425,13 @@ class UFOGalaxyDaemon:
             
             # Process info
             metrics.process_count = len(psutil.pids())
-            metrics.thread_count = sum(p.num_threads() for p in psutil.process_iter())
+            thread_count = 0
+            for p in psutil.process_iter():
+                try:
+                    thread_count += p.num_threads()
+                except (psutil.NoSuchProcess, psutil.AccessDenied):
+                    pass
+            metrics.thread_count = thread_count
             
             # Uptime
             if self.start_time:

@@ -82,8 +82,9 @@ deploy_core() {
 
 # 部署监控服务
 deploy_monitoring() {
-    print_info "部署监控服务 (Prometheus, Grafana, Jaeger)..."
-    docker-compose up -d prometheus grafana jaeger
+    print_info "部署监控服务..."
+    # 使用 production compose 部署监控相关服务
+    docker-compose -f docker-compose.production.yml up -d metrics dashboard log-aggregator
     print_success "监控服务部署完成"
 }
 
@@ -95,8 +96,8 @@ deploy_ollama() {
     
     print_info "正在拉取常用模型 (llama3.2, qwen2.5)..."
     sleep 5
-    docker exec ufo-ollama ollama pull llama3.2 || print_warning "llama3.2 拉取失败"
-    docker exec ufo-ollama ollama pull qwen2.5 || print_warning "qwen2.5 拉取失败"
+    docker exec ollama ollama pull llama3.2 || print_warning "llama3.2 拉取失败"
+    docker exec ollama ollama pull qwen2.5 || print_warning "qwen2.5 拉取失败"
     print_success "模型拉取完成"
 }
 
@@ -113,7 +114,7 @@ deploy_turn() {
         sed -i "s/EXTERNAL_IP=.*/EXTERNAL_IP=$EXTERNAL_IP/" .env
     fi
     
-    docker-compose up -d turn
+    docker-compose --profile webrtc up -d coturn
     print_success "TURN 服务器部署完成"
 }
 
@@ -154,25 +155,28 @@ check_health() {
     fi
     
     # 检查 Redis
-    if docker exec ufo-redis redis-cli ping > /dev/null 2>&1; then
+    if docker exec redis redis-cli ping > /dev/null 2>&1; then
         print_success "Redis 运行正常"
     else
         print_warning "Redis 可能还在启动中..."
     fi
     
-    # 检查 Grafana
+    # 检查 Grafana (仅在 production 模式部署)
     if curl -s http://localhost:3000 > /dev/null 2>&1; then
         print_success "Grafana 运行正常 (http://localhost:3000)"
-        print_info "默认账号: admin / admin123"
-    else
-        print_warning "Grafana 可能还在启动中..."
+        print_info "默认账号: admin / admin"
     fi
-    
-    # 检查 Prometheus
+
+    # 检查 Prometheus (仅在 production 模式部署)
     if curl -s http://localhost:9090 > /dev/null 2>&1; then
         print_success "Prometheus 运行正常 (http://localhost:9090)"
+    fi
+
+    # 检查 MongoDB
+    if docker exec mongodb mongosh --eval "db.adminCommand('ping')" > /dev/null 2>&1; then
+        print_success "MongoDB 运行正常"
     else
-        print_warning "Prometheus 可能还在启动中..."
+        print_warning "MongoDB 可能还在启动中..."
     fi
 }
 
