@@ -1,37 +1,28 @@
 """
-UFO³ Galaxy - 书法卷轴式极客 UI (简化版)
-========================================
+Galaxy - 书法卷轴式极客 UI
+==========================
 
-所有能力都集成到智能体对话中：
-- 用户只需要对话
-- 智能体自动调用相应能力
-- 不需要切换面板
-
-版本: v2.3.20
+版本: v2.3.21
 """
 
 import tkinter as tk
 from tkinter import scrolledtext
-import asyncio
-import websockets
-import json
 import threading
 from datetime import datetime
 import keyboard
-from typing import Optional, List, Dict
+from typing import Optional
 import httpx
 
 class ScrollPaperGeekUI:
-    """书法卷轴式极客 UI - 简化版"""
+    """书法卷轴式极客 UI"""
     
     def __init__(self, server_url: str = "http://localhost:8080"):
         self.server_url = server_url
-        self.ws: Optional[websockets.WebSocketClientProtocol] = None
         self.is_visible = False
         
         # 创建主窗口
         self.root = tk.Tk()
-        self.root.title("UFO³ Galaxy")
+        self.root.title("Galaxy")
         self.root.overrideredirect(True)
         self.root.attributes('-topmost', True)
         self.root.attributes('-alpha', 0.97)
@@ -59,12 +50,12 @@ class ScrollPaperGeekUI:
         self._update_time()
     
     def _create_ui(self):
-        """创建 UI - 简化为纯对话界面"""
+        """创建 UI"""
         # 主容器
         self.main_frame = tk.Frame(self.root, bg='#000000')
         self.main_frame.pack(fill=tk.BOTH, expand=True)
         
-        # 创建画布用于绘制背景
+        # 创建画布
         self.canvas = tk.Canvas(self.main_frame, bg='#000000', highlightthickness=0)
         self.canvas.pack(fill=tk.BOTH, expand=True)
         
@@ -88,18 +79,15 @@ class ScrollPaperGeekUI:
     
     def _draw_background(self):
         """绘制极客风格背景"""
-        # 黑白渐变
         for i in range(self.height):
             ratio = i / self.height
             gray = int(20 * ratio)
             color = f'#{gray:02x}{gray:02x}{gray:02x}'
             self.canvas.create_line(0, i, self.width, i, fill=color)
         
-        # 几何装饰线条
         self.canvas.create_line(30, 50, self.width-30, 50, fill='#ffffff', width=1)
         self.canvas.create_line(30, self.height-100, self.width-30, self.height-100, fill='#ffffff', width=1)
         
-        # 斜线网格
         for i in range(-100, self.width + 100, 60):
             self.canvas.create_line(i, 0, i + 150, 150, fill='#1a1a1a', width=1)
     
@@ -117,19 +105,18 @@ class ScrollPaperGeekUI:
         """创建标题栏"""
         self.canvas.create_text(
             self.width // 2, 25,
-            text="UFO³ GALAXY",
+            text="GALAXY",
             font=('Consolas', 18, 'bold'),
             fill='#ffffff'
         )
         
         self.canvas.create_text(
             self.width // 2, 45,
-            text="L4 AUTONOMOUS INTELLIGENCE - v2.3.20",
+            text="L4 AUTONOMOUS INTELLIGENCE - v2.3.21",
             font=('Consolas', 8),
             fill='#666666'
         )
         
-        # 关闭按钮
         close_btn = tk.Button(
             self.root,
             text="×",
@@ -148,7 +135,6 @@ class ScrollPaperGeekUI:
         self.chat_frame = tk.Frame(self.root, bg='#0a0a0a')
         self.chat_frame.place(x=20, y=60, width=self.width-40, height=self.height-180)
         
-        # 对话历史
         self.chat_history = scrolledtext.ScrolledText(
             self.chat_frame,
             font=('Consolas', 10),
@@ -161,16 +147,12 @@ class ScrollPaperGeekUI:
         )
         self.chat_history.pack(fill=tk.BOTH, expand=True)
         
-        # 配置标签样式
         self.chat_history.tag_config('user', foreground='#ffffff', font=('Consolas', 10, 'bold'))
         self.chat_history.tag_config('ai', foreground='#00aaff')
         self.chat_history.tag_config('system', foreground='#666666')
         
-        # 添加欢迎消息
-        self._append_chat("[AI] 你好！我是 UFO Galaxy 智能体。", 'ai')
-        self._append_chat("[AI] 我是 L4 级自主性智能系统。", 'ai')
-        self._append_chat("[AI] 你只需要用自然语言与我对话，我会自动理解并执行。", 'ai')
-        self._append_chat("[AI] 说 '帮助' 查看可用命令。", 'ai')
+        self._append_chat("[AI] 你好！我是 Galaxy 智能体。", 'ai')
+        self._append_chat("[AI] 你可以随便说，我会自动理解并执行操作。", 'ai')
     
     def _create_input_area(self):
         """创建输入区域"""
@@ -204,7 +186,6 @@ class ScrollPaperGeekUI:
         self.status_frame = tk.Frame(self.root, bg='#000000')
         self.status_frame.place(x=0, y=self.height-50, width=self.width, height=50)
         
-        # 状态指示器
         self.status_canvas = tk.Canvas(self.status_frame, width=12, height=12, bg='#000000', highlightthickness=0)
         self.status_canvas.place(x=20, y=10)
         self.status_dot = self.status_canvas.create_oval(2, 2, 10, 10, fill='#00ff00', outline='')
@@ -218,7 +199,6 @@ class ScrollPaperGeekUI:
         )
         self.status_label.place(x=38, y=8)
         
-        # 时间
         self.time_label = tk.Label(
             self.status_frame,
             text="",
@@ -228,10 +208,9 @@ class ScrollPaperGeekUI:
         )
         self.time_label.place(x=self.width-100, y=8)
         
-        # 提示
         hint_label = tk.Label(
             self.status_frame,
-            text="F12 唤醒/隐藏 | ESC 隐藏 | 所有能力集成在对话中",
+            text="F12 唤醒/隐藏 | ESC 隐藏 | 随便说，我会理解并执行",
             font=('Consolas', 8),
             bg='#000000',
             fg='#444444'
@@ -254,13 +233,11 @@ class ScrollPaperGeekUI:
         self.chat_input.delete(0, tk.END)
         self._append_chat(f"[USER] {message}", 'user')
         
-        # 发送到服务器
         threading.Thread(target=self._send_to_server, args=(message,), daemon=True).start()
     
     def _send_to_server(self, message: str):
         """发送消息到服务器"""
         try:
-            import httpx
             response = httpx.post(
                 f"{self.server_url}/api/v1/chat",
                 json={"message": message, "device_id": "windows_client"},

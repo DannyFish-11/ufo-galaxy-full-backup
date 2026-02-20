@@ -1,17 +1,12 @@
 #!/usr/bin/env python3
+# -*- coding: utf-8 -*-
 """
-UFO Galaxy - 主入口
-===================
+Galaxy - 主入口
+===============
 
-启动方式:
-    python main.py
+L4 级自主性智能系统
 
-功能:
-    - 启动 Dashboard 后端
-    - 启动设备协调器
-    - 启动所有节点服务
-
-版本: v2.3.19
+版本: v2.3.21
 """
 
 import os
@@ -20,112 +15,84 @@ import asyncio
 import logging
 from datetime import datetime
 
+# 设置项目根目录
+PROJECT_ROOT = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, PROJECT_ROOT)
+
 # 配置日志
 logging.basicConfig(
     level=logging.INFO,
-    format='%(asctime)s | %(levelname)s | %(message)s'
+    format='%(asctime)s | %(levelname)s | %(message)s',
+    datefmt='%H:%M:%S'
 )
-logger = logging.getLogger("UFO-Galaxy")
+logger = logging.getLogger("Galaxy")
 
-# 版本
-VERSION = "2.3.19"
+# 导入 ASCII 艺术字
+try:
+    from core.ascii_art import print_galaxy
+except ImportError:
+    def print_galaxy(style="minimal"):
+        print("GALAXY - L4 Autonomous Intelligence System")
+
 
 def print_banner():
     """打印启动横幅"""
-    print("""
-============================================================
-    _   _  ___  ___  ___   ___  ___  ___ 
-    | | | || __|| _ \\/ __| / __|| __|| _ \\
-    | |_| || _| |  _/\\__ \\ \\__ \\| _| |   /
-    |___|_||___||_|  |___/ |___/|___||_|_\\
-    
-    Galaxy - L4 级群智能系统
-    版本: {}
-============================================================
-    """.format(VERSION))
+    print()
+    print_galaxy("minimal")
+    print()
+    print("  启动中...")
+    print()
 
-def check_dependencies():
-    """检查依赖"""
-    required = ['fastapi', 'uvicorn', 'pydantic', 'httpx', 'websockets']
-    missing = []
-    
-    for pkg in required:
-        try:
-            __import__(pkg)
-        except ImportError:
-            missing.append(pkg)
-    
-    if missing:
-        logger.warning(f"缺少依赖: {missing}")
-        logger.info("正在安装依赖...")
-        import subprocess
-        subprocess.run([sys.executable, '-m', 'pip', 'install'] + missing, check=True)
-    
-    return True
 
-def load_config():
-    """加载配置"""
-    config = {
-        'host': os.getenv('GALAXY_HOST', '0.0.0.0'),
-        'port': int(os.getenv('GALAXY_PORT', '8080')),
-        'reload': os.getenv('GALAXY_DEBUG', 'false').lower() == 'true',
-    }
+def print_status():
+    """打印系统状态"""
+    print()
+    print("  ═══════════════════════════════════════")
+    print("  核心能力:")
+    print("  ✅ AI 驱动 - 自然语言理解与生成")
+    print("  ✅ 跨设备控制 - 控制手机、平板、电脑")
+    print("  ✅ 自主学习 - 持续学习和知识积累")
+    print("  ✅ 自主思考 - 元认知和目标分解")
+    print("  ✅ 自主编程 - 代码生成和优化")
+    print("  ✅ 知识库 - 知识存储和检索")
+    print("  ✅ 数据库 - PostgreSQL, SQLite, Qdrant")
+    print("  ═══════════════════════════════════════")
+    print()
+    print("  使用方式:")
+    print("  • Dashboard: http://localhost:8080")
+    print("  • Windows 客户端: python enhancements/clients/windows_client/run_ui.py")
+    print("  • 按 F12 唤醒/隐藏客户端")
+    print()
+    print("  你可以随便说，我会自动理解并执行操作！")
+    print()
+
+
+def start_dashboard():
+    """启动 Dashboard"""
+    import uvicorn
+    from dashboard.backend.main import app
     
-    # 加载 .env 文件
-    env_file = '.env'
-    if os.path.exists(env_file):
-        logger.info(f"加载配置文件: {env_file}")
-        with open(env_file, 'r') as f:
-            for line in f:
-                line = line.strip()
-                if line and not line.startswith('#') and '=' in line:
-                    key, value = line.split('=', 1)
-                    os.environ.setdefault(key.strip(), value.strip())
+    print_status()
     
-    return config
+    uvicorn.run(
+        app,
+        host="0.0.0.0",
+        port=8080,
+        log_level="info"
+    )
+
 
 def main():
     """主函数"""
     print_banner()
     
-    logger.info(f"版本: {VERSION}")
-    logger.info(f"时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  时间: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+    print(f"  版本: v2.3.21")
+    print()
     
-    # 检查依赖
-    check_dependencies()
-    
-    # 加载配置
-    config = load_config()
-    
-    logger.info("")
-    logger.info("启动 HTTP 服务...")
-    logger.info(f"访问地址: http://{config['host']}:{config['port']}")
-    logger.info(f"API 文档: http://{config['host']}:{config['port']}/docs")
-    logger.info("")
-    
-    # 启动 Dashboard 后端
-    import uvicorn
-    from dashboard.backend.main import app
-    
-    logger.info("============================================================")
-    logger.info("Galaxy 系统启动完成")
-    logger.info("============================================================")
-    logger.info("")
-    logger.info("API 端点:")
-    logger.info("  POST /api/v1/devices/register  - 设备注册")
-    logger.info("  POST /api/v1/chat              - 对话接口")
-    logger.info("  POST /api/v1/tasks             - 任务提交")
-    logger.info("  GET  /api/v1/devices           - 设备列表")
-    logger.info("  WS   /ws                       - WebSocket")
-    logger.info("============================================================")
-    
-    # 启动服务
-    uvicorn.run(
-        app,
-        host=config['host'],
-        port=config['port'],
-        reload=config['reload']
-    )
+    # 启动 Dashboard
+    start_dashboard()
+
 
 if __name__ == "__main__":
     main()
