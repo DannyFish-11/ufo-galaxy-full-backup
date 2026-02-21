@@ -585,9 +585,16 @@ async def get_available_models():
 async def set_api_key(request: dict):
     """设置 API Key"""
     if API_MANAGER_AVAILABLE and api_manager:
-        provider = request.get("provider", "")
+        category = request.get("category", "direct_models")  # 默认是 direct_models
+        key_name = request.get("provider", "")  # 兼容旧参数名
         api_key = request.get("api_key", "")
-        success = api_manager.set_api_key(provider, api_key)
+        
+        # 如果 provider 是 oneapi，则 category 是 oneapi
+        if key_name == "oneapi":
+            category = "oneapi"
+            key_name = ""
+        
+        success = api_manager.set_api_key(category, key_name, api_key)
         return {"success": success}
     return {"success": False, "error": "API manager not available"}
 

@@ -89,14 +89,36 @@ class APIManager:
         if os.path.exists(self.config_path):
             try:
                 with open(self.config_path, 'r', encoding='utf-8') as f:
-                    self.config = json.load(f)
+                    content = f.read()
+                    if not content.strip():
+                        # 文件为空
+                        logger.warning(f"配置文件为空: {self.config_path}")
+                        self._init_default_config()
+                        self._save_config()
+                        return
+                    
+                    self.config = json.loads(content)
+                    
+                    # 确保是字典类型
+                    if not isinstance(self.config, dict):
+                        logger.error(f"配置文件格式错误: 不是有效的 JSON 对象")
+                        self._init_default_config()
+                        self._save_config()
+                        return
+                    
                 logger.info(f"已加载配置: {self.config_path}")
                 self._parse_config()
+            except json.JSONDecodeError as e:
+                logger.error(f"配置文件 JSON 解析失败: {e}")
+                self._init_default_config()
+                self._save_config()
             except Exception as e:
                 logger.error(f"加载配置失败: {e}")
                 self._init_default_config()
+                self._save_config()
         else:
             self._init_default_config()
+            self._save_config()
     
     def _init_default_config(self):
         """初始化默认配置"""
