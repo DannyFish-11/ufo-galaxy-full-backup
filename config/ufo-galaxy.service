@@ -1,0 +1,27 @@
+[Unit]
+Description=UFO Galaxy AI System
+After=network.target neo4j.service qdrant.service redis.service mongodb.service
+Wants=neo4j.service qdrant.service redis.service mongodb.service
+
+[Service]
+Type=simple
+User=ufo-galaxy
+Group=ufo-galaxy
+WorkingDirectory=/opt/ufo-galaxy
+Environment=PYTHONPATH=/opt/ufo-galaxy
+Environment=PYTHONUNBUFFERED=1
+EnvironmentFile=-/opt/ufo-galaxy/.env
+ExecStart=/usr/bin/python3 /opt/ufo-galaxy/unified_launcher.py --port 8080
+ExecReload=/bin/kill -HUP $MAINPID
+Restart=always
+RestartSec=10
+StandardOutput=journal
+StandardError=journal
+SyslogIdentifier=ufo-galaxy
+
+# Resource limits
+LimitNOFILE=65536
+MemoryMax=4G
+
+[Install]
+WantedBy=multi-user.target
