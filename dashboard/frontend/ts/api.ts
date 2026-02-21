@@ -1,0 +1,185 @@
+/**
+ * Galaxy TypeScript API 客户端
+ * ============================
+ * 
+ * 类型安全的 API 调用
+ */
+
+import type {
+  SystemInfo,
+  Device,
+  DeviceRegisterRequest,
+  Agent,
+  LLMProvider,
+  ChatRequest,
+  ChatResponse,
+  WSMessage,
+  DeviceCommand,
+  ParallelExecuteResponse,
+} from './types';
+
+/**
+ * Galaxy API 客户端
+ */
+export class GalaxyAPI {
+  private baseUrl: string;
+  private ws: WebSocket | null = null;
+  private wsHandlers: Map<string, (data: any) => void> = new Map();
+
+  constructor(baseUrl: string = 'http://localhost:8080') {
+    this.baseUrl = baseUrl;
+  }
+
+  // ===========================================================================
+  // 系统 API
+  // ===========================================================================
+
+  /**
+   * 获取系统信息
+   */
+  async getSystemInfo(): Promise<SystemInfo> {
+    const response = await fetch(`${this.baseUrl}/api/v1/system/info`);
+    return response.json();
+  }
+
+  /**
+   * 获取 ASCII 艺术字
+   */
+  async getAsciiArt(style: 'minimal' | 'normal' | 'large' = 'minimal'): Promise<{ ascii: string }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/ascii?style=${style}`);
+    return response.json();
+  }
+
+  // ===========================================================================
+  // 聊天 API
+  // ===========================================================================
+
+  /**
+   * 发送聊天消息
+   */
+  async chat(message: string, deviceId?: string): Promise<ChatResponse> {
+    const response = await fetch(`${this.baseUrl}/api/v1/chat`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ message, device_id: deviceId } as ChatRequest),
+    });
+    return response.json();
+  }
+
+  // ===========================================================================
+  // 设备 API
+  // ===========================================================================
+
+  /**
+   * 获取设备列表
+   */
+  async getDevices(): Promise<{ devices: Device[] }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/devices`);
+    return response.json();
+  }
+
+  /**
+   * 注册设备
+   */
+  async registerDevice(request: DeviceRegisterRequest): Promise<{ status: string; device: Device }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/devices/register`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    });
+    return response.json();
+  }
+
+  // ===========================================================================
+  // Agent API
+  // ===========================================================================
+
+  /**
+   * 获取 Agent 列表
+   */
+  async getAgents(): Promise<{ agents: Agent[] }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/agents`);
+    return response.json();
+  }
+
+  /**
+   * 获取 LLM 提供商列表
+   */
+  async getLLMProviders(): Promise<{ providers: LLMProvider[] }> {
+    const response = await fetch(`${this.baseUrl}/api/v1/llm/providers`);
+    return response.json();
+  }
+
+  // ===========================================================================
+  // 多设备操作 API
+  // ===========================================================================
+
+  /**
+   * 并行执行多设备命令
+   */
+  async executeParallel(commands: DeviceCommand[]): Promise<ParallelExecuteResponse> {
+    const response = await fetch(`${this.baseUrl}/api/v1/execute/parallel`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ commands }),
+    });
+    return response.json();
+  }
+
+  // ===========================================================================
+  // WebSocket
+  // ===========================================================================
+
+  /**
+   * 连接 WebSocket
+   */
+  connectWebSocket(onMessage: (data: WSMessage) => void): void {
+    const wsUrl = this.baseUrl.replace('http://', 'ws://').replace('https://', 'wss://');
+    this.ws = new WebSocket(`${wsUrl}/ws`);
+
+    this.ws.onopen = () => {
+      console.log('WebSocket connected');
+    };
+
+    this.ws.onmessage = (event) => {
+      try {
+        const data = JSON.parse(event.data) as WSMessage;
+        onMessage(data);
+      } catch (e) {
+        console.error('Failed to parse WebSocket message:', e);
+      }
+    };
+
+    this.ws.onclose = () => {
+      console.log('WebSocket disconnected');
+      // 自动重连
+      setTimeout(() => this.connectWebSocket(onMessage), 5000);
+    };
+
+    this.ws.onerror = (error) => {
+      console.error('WebSocket error:', error);
+    };
+  }
+
+  /**
+   * 发送 WebSocket 消息
+   */
+  sendWSMessage(message: WSMessage): void {
+    if (this.ws && this.ws.readyState === WebSocket.OPEN) {
+      this.ws.send(JSON.stringify(message));
+    }
+  }
+
+  /**
+   * 断开 WebSocket
+   */
+  disconnectWebSocket(): void {
+    if (this.ws) {
+      this.ws.close();
+      this.ws = null;
+    }
+  }
+}
+
+// 默认实例
+export const galaxyAPI = new GalaxyAPI();
