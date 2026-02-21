@@ -1,0 +1,128 @@
+{
+  "metadata": {
+    "version": "1.0",
+    "description": "Galaxy API 配置 - 双并行策略",
+    "last_updated": "2026-02-21"
+  },
+  
+  "strategy": {
+    "type": "dual_parallel",
+    "description": "双并行策略: OneAPI聚合器(核心) + 其他单独模型(细节)",
+    "priority": {
+      "oneapi": 1,
+      "direct": 2
+    }
+  },
+  
+  "oneapi": {
+    "enabled": true,
+    "description": "OneAPI 聚合器 - 核心供给",
+    "base_url": "http://localhost:8001/v1",
+    "api_key": "",
+    "models": [
+      {"id": "gpt-4o", "name": "GPT-4o", "provider": "openai"},
+      {"id": "gpt-3.5-turbo", "name": "GPT-3.5 Turbo", "provider": "openai"},
+      {"id": "claude-3-5-sonnet", "name": "Claude 3.5 Sonnet", "provider": "anthropic"},
+      {"id": "deepseek-chat", "name": "DeepSeek Chat", "provider": "deepseek"},
+      {"id": "glm-4", "name": "GLM-4", "provider": "zhipu"},
+      {"id": "llama-3.3-70b", "name": "Llama 3.3 70B", "provider": "meta"}
+    ]
+  },
+  
+  "direct_models": {
+    "description": "直接模型 - 细节供给",
+    
+    "openai": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://api.openai.com/v1",
+      "models": ["gpt-4o", "gpt-4-turbo", "gpt-3.5-turbo"]
+    },
+    
+    "anthropic": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://api.anthropic.com/v1",
+      "models": ["claude-3-5-sonnet-20241022", "claude-3-opus-20240229"]
+    },
+    
+    "deepseek": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://api.deepseek.com/v1",
+      "models": ["deepseek-chat", "deepseek-coder"]
+    },
+    
+    "zhipu": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://open.bigmodel.cn/api/paas/v4",
+      "models": ["glm-4", "glm-4-flash", "glm-4-plus"]
+    },
+    
+    "groq": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://api.groq.com/openai/v1",
+      "models": ["llama-3.3-70b-versatile", "llama-3.1-8b-instant"]
+    },
+    
+    "openrouter": {
+      "enabled": true,
+      "api_key": "",
+      "base_url": "https://openrouter.ai/api/v1",
+      "models": ["openai/gpt-4o", "anthropic/claude-3.5-sonnet", "google/gemini-pro"]
+    },
+    
+    "together": {
+      "enabled": false,
+      "api_key": "",
+      "base_url": "https://api.together.xyz/v1",
+      "models": ["meta-llama/Llama-3-70b-chat-hf"]
+    },
+    
+    "perplexity": {
+      "enabled": false,
+      "api_key": "",
+      "base_url": "https://api.perplexity.ai",
+      "models": ["llama-3.1-sonar-large-128k-online"]
+    }
+  },
+  
+  "tools": {
+    "brave_search": {
+      "enabled": true,
+      "api_key": "",
+      "description": "Brave 搜索 API"
+    },
+    "openweather": {
+      "enabled": true,
+      "api_key": "",
+      "description": "OpenWeather 天气 API"
+    },
+    "github": {
+      "enabled": true,
+      "api_key": "",
+      "description": "GitHub API"
+    }
+  },
+  
+  "nodes": {
+    "description": "节点服务配置",
+    "base_url": "http://localhost",
+    "registry": {
+      "01": {"name": "OneAPI", "port": 8001, "status": "configured"},
+      "04": {"name": "Router", "port": 8004, "status": "configured"},
+      "33": {"name": "ADB", "port": 8033, "status": "configured"},
+      "36": {"name": "UIAWindows", "port": 8036, "status": "configured"},
+      "45": {"name": "DesktopAuto", "port": 8045, "status": "configured"},
+      "50": {"name": "Transformer", "port": 8050, "status": "configured"},
+      "70": {"name": "AutonomousLearning", "port": 8070, "status": "configured"},
+      "71": {"name": "MultiDeviceCoordination", "port": 8071, "status": "configured"},
+      "72": {"name": "KnowledgeBase", "port": 8072, "status": "configured"},
+      "90": {"name": "MultimodalVision", "port": 8090, "status": "configured"},
+      "92": {"name": "AutoControl", "port": 8092, "status": "configured"},
+      "108": {"name": "MetaCognition", "port": 8108, "status": "configured"}
+    }
+  }
+}

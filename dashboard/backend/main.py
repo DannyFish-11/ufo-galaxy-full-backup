@@ -533,3 +533,97 @@ async def get_coordinator_status():
     if REPO_COORDINATOR_AVAILABLE and repo_coordinator:
         return repo_coordinator.get_status()
     return {"error": "Repo coordinator not available"}
+
+
+# ============================================================================
+# API 配置管理
+# ============================================================================
+
+# 导入 API 管理器
+try:
+    from core.api_manager import api_manager
+    API_MANAGER_AVAILABLE = True
+except ImportError:
+    API_MANAGER_AVAILABLE = False
+    api_manager = None
+
+
+@app.get("/api/v1/config")
+async def get_config():
+    """获取完整配置"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        return api_manager.get_config()
+    return {"error": "API manager not available"}
+
+
+@app.post("/api/v1/config")
+async def update_config(request: dict):
+    """更新配置"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        success = api_manager.update_config(request)
+        return {"success": success}
+    return {"success": False, "error": "API manager not available"}
+
+
+@app.get("/api/v1/config/models")
+async def get_models():
+    """获取所有模型"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        return {"models": api_manager.get_models()}
+    return {"models": []}
+
+
+@app.get("/api/v1/config/models/available")
+async def get_available_models():
+    """获取可用模型"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        return {"models": api_manager.get_available_models()}
+    return {"models": []}
+
+
+@app.post("/api/v1/config/api-key")
+async def set_api_key(request: dict):
+    """设置 API Key"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        provider = request.get("provider", "")
+        api_key = request.get("api_key", "")
+        success = api_manager.set_api_key(provider, api_key)
+        return {"success": success}
+    return {"success": False, "error": "API manager not available"}
+
+
+@app.get("/api/v1/config/nodes")
+async def get_config_nodes():
+    """获取所有节点配置"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        return {"nodes": api_manager.get_nodes()}
+    return {"nodes": []}
+
+
+@app.post("/api/v1/config/nodes/check")
+async def check_nodes():
+    """检查所有节点"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        results = await api_manager.check_all_nodes()
+        return {"results": results}
+    return {"results": {}}
+
+
+@app.get("/api/v1/config/status")
+async def get_config_status():
+    """获取配置状态"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        return api_manager.get_status()
+    return {"error": "API manager not available"}
+
+
+@app.post("/api/v1/config/test-llm")
+async def test_llm(request: dict):
+    """测试 LLM 调用"""
+    if API_MANAGER_AVAILABLE and api_manager:
+        message = request.get("message", "Hello, this is a test.")
+        result = await api_manager.call_llm([
+            {"role": "user", "content": message}
+        ])
+        return result
+    return {"success": False, "error": "API manager not available"}
