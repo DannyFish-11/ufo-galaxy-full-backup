@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """
-UFO³ Galaxy Windows 客户端启动器
-================================
+Galaxy Windows 客户端启动器
+==========================
 
 启动方式:
     python run_ui.py
@@ -9,9 +9,10 @@ UFO³ Galaxy Windows 客户端启动器
 功能:
     - F12 唤醒/隐藏
     - 书法卷轴式展开动画
-    - 极客风格 UI
+    - 与 AI 智能体对话
+    - 显示节点和工具状态
 
-版本: v2.3.19
+版本: v2.3.26
 """
 
 import sys
@@ -23,7 +24,7 @@ sys.path.insert(0, PROJECT_ROOT)
 
 def check_dependencies():
     """检查依赖"""
-    required = ['tkinter', 'keyboard', 'websockets']
+    required = ['tkinter', 'keyboard', 'httpx']
     missing = []
     
     for pkg in required:
@@ -47,7 +48,7 @@ def check_dependencies():
 def main():
     """主函数"""
     print("=" * 60)
-    print("UFO³ Galaxy Windows 客户端")
+    print("Galaxy Windows 客户端 v2.3.26")
     print("=" * 60)
     print()
     print("使用方式:")
@@ -55,21 +56,22 @@ def main():
     print("  ESC - 隐藏面板")
     print()
     print("功能:")
-    print("  - 对话: 与 AI 智能体对话")
-    print("  - 节点: 查看节点状态")
-    print("  - 设备: 管理连接设备")
-    print("  - Agent: 查看 Agent 状态")
+    print("  • 对话 - 与 AI 智能体对话")
+    print("  • 模型 - 查看已配置的 LLM")
+    print("  • 工具 - 查看工具 API")
+    print("  • 节点 - 查看节点状态")
     print()
     print("=" * 60)
     
     check_dependencies()
     
-    from scroll_paper_geek_ui import ScrollPaperGeekUI
+    # 使用完整版客户端
+    from galaxy_client import GalaxyClient
     
     # 从环境变量获取服务器地址
-    server_url = os.environ.get('GALAXY_SERVER', 'ws://localhost:8080/ws')
+    server_url = os.environ.get('GALAXY_SERVER', 'http://localhost:8080')
     
-    app = ScrollPaperGeekUI(server_url=server_url)
+    app = GalaxyClient(server_url=server_url)
     app.run()
 
 if __name__ == "__main__":

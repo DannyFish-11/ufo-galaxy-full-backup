@@ -314,8 +314,32 @@ async def chat(request: dict):
                 "timestamp": datetime.now().isoformat()
             })
     
+    # 如果 galaxy_core 不可用，尝试调用 LLM
+    if API_MANAGER_AVAILABLE and api_manager:
+        try:
+            result = await api_manager.call_llm([
+                {"role": "user", "content": message}
+            ])
+            if result.get("success"):
+                return JSONResponse({
+                    "response": result.get("content", "处理完成"),
+                    "provider": result.get("provider", ""),
+                    "model": result.get("model", ""),
+                    "timestamp": datetime.now().isoformat()
+                })
+            else:
+                return JSONResponse({
+                    "response": f"❌ LLM 调用失败: {result.get('error', 'Unknown error')}",
+                    "timestamp": datetime.now().isoformat()
+                })
+        except Exception as e:
+            return JSONResponse({
+                "response": f"❌ 错误: {str(e)}",
+                "timestamp": datetime.now().isoformat()
+            })
+    
     return JSONResponse({
-        "response": f"收到: {message}",
+        "response": f"收到: {message}\n\n提示: 请配置 API Key 以启用智能对话功能。",
         "timestamp": datetime.now().isoformat()
     })
 
