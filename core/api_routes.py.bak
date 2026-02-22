@@ -51,15 +51,6 @@ class DeviceRegisterRequest(BaseModel):
     capabilities: List[str] = []
     os_version: str = ""
     app_version: str = ""
-    # 新增字段
-    manufacturer: str = ""
-    model: str = ""
-    groups: List[str] = []
-    tags: List[str] = []
-    ip_address: str = ""
-    port: int = 0
-    mac_address: str = ""
-    metadata: Dict[str, Any] = {}
 
 class DeviceStatusUpdate(BaseModel):
     device_id: str
@@ -361,51 +352,28 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     
     @router.post("/api/v1/devices/register")
     async def register_device(req: DeviceRegisterRequest):
-        """注册设备 - 使用统一的设备注册管理器"""
-        try:
-            from core.device_registry import device_registry
-            
-            # 使用新的设备注册管理器
-            device = await device_registry.register(
-                device_id=req.device_id,
-                device_type=req.device_type,
-                name=req.device_name,
-                capabilities=req.capabilities,
-                groups=req.groups,
-                tags=req.tags,
-                ip_address=req.ip_address,
-                port=req.port,
-                mac_address=req.mac_address,
-                manufacturer=req.manufacturer,
-                model=req.model,
-                os_version=req.os_version,
-                app_version=req.app_version,
-                metadata=req.metadata,
-            )
-            
-            # 同时更新旧的 registered_devices 以保持兼容
-            device_info = device.to_dict()
-            device_info["registered_at"] = datetime.now().isoformat()
-            device_info["last_seen"] = datetime.now().isoformat()
-            device_info["status"] = "registered"
-            registered_devices[req.device_id] = device_info
-            
-            logger.info(f"设备注册: {req.device_id} ({req.device_type})")
-            
-            return JSONResponse({
-                "success": True,
-                "device_id": req.device_id,
-                "message": "设备注册成功",
-                "server_version": "2.0.0",
-                "available_nodes": list(node_status_cache.keys())[:20],
-                "device": device_info,
-            })
-        except Exception as e:
-            logger.error(f"设备注册失败: {e}")
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
+        """注册设备"""
+        device_info = {
+            "device_id": req.device_id,
+            "device_type": req.device_type,
+            "device_name": req.device_name or f"Device-{req.device_id[:8]}",
+            "capabilities": req.capabilities,
+            "os_version": req.os_version,
+            "app_version": req.app_version,
+            "registered_at": datetime.now().isoformat(),
+            "last_seen": datetime.now().isoformat(),
+            "status": "registered"
+        }
+        registered_devices[req.device_id] = device_info
+        logger.info(f"设备注册: {req.device_id} ({req.device_type})")
+        
+        return JSONResponse({
+            "success": True,
+            "device_id": req.device_id,
+            "message": "设备注册成功",
+            "server_version": "2.0.0",
+            "available_nodes": list(node_status_cache.keys())[:20]
+        })
     
     @router.post("/api/v1/devices/status")
     async def update_device_status(req: DeviceStatusUpdate):
@@ -426,342 +394,25 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
         raise HTTPException(status_code=404, detail="设备未注册")
     
     @router.get("/api/v1/devices")
-    async def list_devices(
-        device_type: str = None,
-        group: str = None,
-        tag: str = None,
-        online_only: bool = False,
-    ):
-        """列出所有设备 - 支持过滤"""
-        try:
-            from core.device_registry import device_registry
-            
-            # 使用新的设备注册管理器
-            devices = await device_registry.discover(
-                device_type=device_type,
-                group=group,
-                tag=tag,
-                online_only=online_only,
-            )
-            
-            device_list = [d.to_dict() for d in devices]
-            
-            # 同时包含旧的 registered_devices 以保持兼容
-            for did, info in registered_devices.items():
-                if did not in [d["device_id"] for d in device_list]:
-                    info["online"] = did in connection_manager.active_devices
-                    device_list.append(info)
-            
-            return JSONResponse({"devices": device_list, "total": len(device_list)})
-        except Exception as e:
-            # 降级到旧的实现
-            devices = []
-            for did, info in registered_devices.items():
-                devices.append({
-                    **info,
-                    "online": did in connection_manager.active_devices
-                })
-            return JSONResponse({"devices": devices, "total": len(devices)})
+    async def list_devices():
+        """列出所有设备"""
+        devices = []
+        for did, info in registered_devices.items():
+            devices.append({
+                **info,
+                "online": did in connection_manager.active_devices
+            })
+        return JSONResponse({"devices": devices, "total": len(devices)})
     
     @router.get("/api/v1/devices/{device_id}")
     async def get_device(device_id: str):
         """获取设备详情"""
-        try:
-            from core.device_registry import device_registry
-            
-            device = device_registry.get(device_id)
-            if device:
-                info = device.to_dict()
-                info["online"] = device.is_online()
-                return JSONResponse(info)
-        except:
-            pass
-        
-        # 降级到旧的实现
         if device_id in registered_devices:
             info = registered_devices[device_id]
             info["online"] = device_id in connection_manager.active_devices
             return JSONResponse(info)
         raise HTTPException(status_code=404, detail="设备未找到")
     
-
-    # ========================================================================
-    # 设备发现和管理 API (新增)
-    # ========================================================================
-    
-    @router.get("/api/v1/devices/discover")
-    async def discover_devices(
-        device_type: str = None,
-        capability: str = None,
-        group: str = None,
-        tag: str = None,
-        online_only: bool = True,
-    ):
-        """
-        发现设备
-        
-        支持按类型、能力、分组、标签过滤
-        """
-        try:
-            from core.device_registry import device_registry
-            
-            devices = await device_registry.discover(
-                device_type=device_type,
-                capability=capability,
-                group=group,
-                tag=tag,
-                online_only=online_only,
-            )
-            
-            return JSONResponse({
-                "success": True,
-                "devices": [d.to_dict() for d in devices],
-                "total": len(devices),
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.post("/api/v1/devices/{device_id}/groups")
-    async def add_device_to_group(device_id: str, group: str):
-        """添加设备到分组"""
-        try:
-            from core.device_registry import device_registry
-            
-            success = device_registry.add_to_group(device_id, group)
-            
-            return JSONResponse({
-                "success": success,
-                "device_id": device_id,
-                "group": group,
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.delete("/api/v1/devices/{device_id}/groups/{group}")
-    async def remove_device_from_group(device_id: str, group: str):
-        """从分组移除设备"""
-        try:
-            from core.device_registry import device_registry
-            
-            success = device_registry.remove_from_group(device_id, group)
-            
-            return JSONResponse({
-                "success": success,
-                "device_id": device_id,
-                "group": group,
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.post("/api/v1/devices/{device_id}/tags")
-    async def add_device_tag(device_id: str, tag: str):
-        """添加设备标签"""
-        try:
-            from core.device_registry import device_registry
-            
-            success = device_registry.add_tag(device_id, tag)
-            
-            return JSONResponse({
-                "success": success,
-                "device_id": device_id,
-                "tag": tag,
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.delete("/api/v1/devices/{device_id}/tags/{tag}")
-    async def remove_device_tag(device_id: str, tag: str):
-        """移除设备标签"""
-        try:
-            from core.device_registry import device_registry
-            
-            success = device_registry.remove_tag(device_id, tag)
-            
-            return JSONResponse({
-                "success": success,
-                "device_id": device_id,
-                "tag": tag,
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.get("/api/v1/devices/groups")
-    async def list_device_groups():
-        """列出所有设备分组"""
-        try:
-            from core.device_registry import device_registry
-            
-            groups = []
-            for group_name, device_ids in device_registry.groups.items():
-                groups.append({
-                    "name": group_name,
-                    "device_count": len(device_ids),
-                    "devices": device_ids,
-                })
-            
-            return JSONResponse({
-                "success": True,
-                "groups": groups,
-                "total": len(groups),
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.get("/api/v1/devices/tags")
-    async def list_device_tags():
-        """列出所有设备标签"""
-        try:
-            from core.device_registry import device_registry
-            
-            tags = []
-            for tag_name, device_ids in device_registry.tag_index.items():
-                tags.append({
-                    "name": tag_name,
-                    "device_count": len(device_ids),
-                    "devices": device_ids,
-                })
-            
-            return JSONResponse({
-                "success": True,
-                "tags": tags,
-                "total": len(tags),
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.get("/api/v1/devices/capabilities")
-    async def list_device_capabilities():
-        """列出所有设备能力"""
-        try:
-            from core.device_registry import device_registry
-            
-            capabilities = []
-            for cap_name, device_ids in device_registry.capability_index.items():
-                capabilities.append({
-                    "name": cap_name,
-                    "device_count": len(device_ids),
-                    "devices": device_ids,
-                })
-            
-            return JSONResponse({
-                "success": True,
-                "capabilities": capabilities,
-                "total": len(capabilities),
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.post("/api/v1/devices/negotiate")
-    async def negotiate_device_capability(capability: str, device_id: str = None):
-        """
-        协商设备能力
-        
-        找到具有指定能力的最佳设备
-        """
-        try:
-            from core.device_registry import device_registry
-            
-            device = device_registry.negotiate_capability(capability, device_id)
-            
-            if device:
-                return JSONResponse({
-                    "success": True,
-                    "device": device.to_dict(),
-                })
-            else:
-                return JSONResponse({
-                    "success": False,
-                    "error": f"没有找到具有 {capability} 能力的设备",
-                }, status_code=404)
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.post("/api/v1/devices/{device_id}/heartbeat")
-    async def device_heartbeat(device_id: str):
-        """设备心跳"""
-        try:
-            from core.device_registry import device_registry
-            
-            success = await device_registry.heartbeat(device_id)
-            
-            return JSONResponse({
-                "success": success,
-                "device_id": device_id,
-                "timestamp": time.time(),
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.get("/api/v1/devices/stats")
-    async def device_stats():
-        """设备统计"""
-        try:
-            from core.device_registry import device_registry
-            
-            stats = device_registry.get_stats()
-            
-            return JSONResponse({
-                "success": True,
-                "stats": stats,
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-    
-    @router.delete("/api/v1/devices/{device_id}")
-    async def unregister_device(device_id: str):
-        """注销设备"""
-        try:
-            from core.device_registry import device_registry
-            
-            success = await device_registry.unregister(device_id)
-            
-            # 同时从旧的 registered_devices 移除
-            if device_id in registered_devices:
-                del registered_devices[device_id]
-            
-            return JSONResponse({
-                "success": success,
-                "device_id": device_id,
-            })
-        except Exception as e:
-            return JSONResponse({
-                "success": False,
-                "error": str(e),
-            }, status_code=500)
-
     # ========================================================================
     # /api/v1/nodes - 节点查询和调用
     # ========================================================================
