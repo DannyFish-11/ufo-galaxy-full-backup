@@ -1165,9 +1165,143 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
     
     @router.post("/api/v1/chat")
     async def chat(req: ChatRequest):
-        """对话接口 - 调用 LLM 处理用户消息"""
+        """
+        对话接口 - AI 驱动的统一入口
+        
+        流程：
+        1. 解析用户意图
+        2. 根据意图决定执行方式
+        3. 设备控制 → 调用设备控制服务
+        4. 节点调用 → 调用目标节点
+        5. 普通对话 → 调用 LLM
+        """
         try:
-            # 尝试使用 OpenAI API
+            # ================================================================
+            # Step 1: 解析意图
+            # ================================================================
+            parsed_intent = None
+            try:
+                from core.ai_intent import get_intent_parser
+                intent_parser = get_intent_parser()
+                parsed_intent = await intent_parser.parse(req.message, {})
+                intent = parsed_intent.intent
+                confidence = parsed_intent.confidence
+                logger.info(f"意图解析: {intent} (置信度: {confidence:.2f})")
+            except Exception as e:
+                logger.warning(f"意图解析失败，使用默认对话: {e}")
+                intent = "chat"
+                confidence = 0.0
+            
+            # ================================================================
+            # Step 2: 根据意图执行
+            # ================================================================
+            
+            # 设备控制
+            if intent == "device_control" and confidence > 0.5:
+                try:
+                    from core.device_control_service import device_control
+                    
+                    # 获取目标设备
+                    device_id = req.device_id if req.device_id else None
+                    if not device_id:
+                        devices = device_control.list_devices()
+                        if devices:
+                            device_id = devices[0].device_id
+                    
+                    if device_id:
+                        # 根据消息内容决定操作
+                        message_lower = req.message.lower()
+                        result = None
+                        
+                        if "打开" in req.message or "open" in message_lower:
+                            # 提取应用名
+                            import re
+                            match = re.search(r"打开\s*(\S+)|open\s+(\w+)", req.message, re.IGNORECASE)
+                            app_name = match.group(1) or match.group(2) if match else ""
+                            if app_name:
+                                result = await device_control.open_app(device_id, app_name)
+                        
+                        elif "截图" in req.message or "screenshot" in message_lower:
+                            result = await device_control.screenshot(device_id)
+                        
+                        elif "点击" in req.message or "click" in message_lower:
+                            # 需要坐标，这里简化处理
+                            result = {"status": "need_coordinates", "message": "请提供点击坐标"}
+                        
+                        else:
+                            # 通用控制
+                            result = await device_control.control_device(
+                                from_device_id="server",
+                                to_device_id=device_id,
+                                action="execute",
+                                params={"command": req.message}
+                            )
+                        
+                        return JSONResponse({
+                            "success": True,
+                            "reply": f"已在设备 {device_id} 上执行操作",
+                            "intent": intent,
+                            "device_id": device_id,
+                            "result": result,
+                        })
+                    else:
+                        return JSONResponse({
+                            "success": False,
+                            "reply": "没有可用的设备，请先连接设备",
+                            "intent": intent,
+                        })
+                except Exception as e:
+                    logger.error(f"设备控制失败: {e}")
+                    # 降级到普通对话
+                    pass
+            # 节点调用
+            elif intent in ["task_manage", "search", "ocr", "file_operation"] and confidence > 0.5:
+                try:
+                    # 获取目标节点
+                    target_node = None
+                    if parsed_intent and parsed_intent.targets:
+                        target_node = parsed_intent.targets[0]
+                    else:
+                        # 根据意图映射节点
+                        node_mapping = {
+                            "task_manage": "Node_02_Tasker",
+                            "search": "Node_22_BraveSearch",
+                            "ocr": "Node_15_OCR",
+                            "file_operation": "Node_06_Filesystem",
+                        }
+                        target_node = node_mapping.get(intent)
+                    
+                    if target_node:
+                        # 调用节点
+                        import httpx
+                        node_num = int(target_node.replace("Node_", "").split("_")[0])
+                        port = 8000 + node_num
+                        url = f"http://localhost:{port}/execute"
+                        
+                        params = {}
+                        if parsed_intent:
+                            params = parsed_intent.params
+                        params["query"] = req.message
+                        
+                        async with httpx.AsyncClient(timeout=30) as client:
+                            resp = await client.post(url, json=params)
+                            if resp.status_code == 200:
+                                result = resp.json()
+                                return JSONResponse({
+                                    "success": True,
+                                    "reply": f"节点 {target_node} 执行完成",
+                                    "intent": intent,
+                                    "node": target_node,
+                                    "result": result,
+                                })
+                except Exception as e:
+                    logger.warning(f"节点调用失败: {e}")
+                    # 降级到普通对话
+                    pass
+            
+            # ================================================================
+            # Step 3: 普通对话 - 调用 LLM
+            # ================================================================
             api_key = os.environ.get("OPENAI_API_KEY", "")
             api_base = os.environ.get("OPENAI_API_BASE", "https://api.openai.com/v1")
             
@@ -1189,7 +1323,7 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 })
             
             import httpx
-            messages = [{"role": "system", "content": "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。"}]
+            messages = [{"role": "system", "content": "你是 UFO Galaxy 智能助手，一个 L4 级自主性 AI 系统。你可以控制设备、调用节点、执行任务。"}]
             for ctx in req.context[-10:]:
                 messages.append(ctx)
             messages.append({"role": "user", "content": req.message})
@@ -1212,7 +1346,8 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                     "success": True,
                     "reply": reply,
                     "model": data.get("model", ""),
-                    "usage": data.get("usage", {})
+                    "usage": data.get("usage", {}),
+                    "intent": intent if parsed_intent else "chat",
                 })
                 
         except Exception as e:
