@@ -1,0 +1,18 @@
+{
+    "id": "hello",
+    "name": "问候",
+    "description": "一个简单的问候技能示例",
+    "version": "1.0.0",
+    "author": "UFO Galaxy",
+    "tags": ["example", "demo"],
+    "parameters": [
+        {
+            "name": "name",
+            "type": "string",
+            "description": "要问候的名字",
+            "required": true
+        }
+    ],
+    "handler_file": "handler.py",
+    "handler_function": "execute"
+}
