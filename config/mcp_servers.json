@@ -1,0 +1,71 @@
+{
+  "version": "1.0.0",
+  "description": "MCP 服务器配置 - 支持动态加载 GitHub 上的 MCP 工具",
+  "servers": [
+    {
+      "name": "filesystem",
+      "command": "npx -y @modelcontextprotocol/server-filesystem",
+      "description": "文件系统操作",
+      "auto_start": false,
+      "env": {}
+    },
+    {
+      "name": "github",
+      "command": "npx -y @modelcontextprotocol/server-github",
+      "description": "GitHub 操作",
+      "auto_start": false,
+      "env": {
+        "GITHUB_TOKEN": "${GITHUB_TOKEN}"
+      }
+    },
+    {
+      "name": "brave-search",
+      "command": "npx -y @modelcontextprotocol/server-brave-search",
+      "description": "Brave 搜索",
+      "auto_start": false,
+      "env": {
+        "BRAVE_API_KEY": "${BRAVE_API_KEY}"
+      }
+    },
+    {
+      "name": "puppeteer",
+      "command": "npx -y @modelcontextprotocol/server-puppeteer",
+      "description": "浏览器自动化",
+      "auto_start": false,
+      "env": {}
+    },
+    {
+      "name": "slack",
+      "command": "npx -y @modelcontextprotocol/server-slack",
+      "description": "Slack 集成",
+      "auto_start": false,
+      "env": {
+        "SLACK_BOT_TOKEN": "${SLACK_BOT_TOKEN}"
+      }
+    },
+    {
+      "name": "postgres",
+      "command": "npx -y @modelcontextprotocol/server-postgres",
+      "description": "PostgreSQL 数据库",
+      "auto_start": false,
+      "env": {
+        "POSTGRES_CONNECTION_STRING": "${POSTGRES_CONNECTION_STRING}"
+      }
+    },
+    {
+      "name": "sqlite",
+      "command": "npx -y @modelcontextprotocol/server-sqlite",
+      "description": "SQLite 数据库",
+      "auto_start": false,
+      "env": {}
+    },
+    {
+      "name": "memory",
+      "command": "npx -y @modelcontextprotocol/server-memory",
+      "description": "记忆系统",
+      "auto_start": false,
+      "env": {}
+    }
+  ],
+  "custom_servers": []
+}

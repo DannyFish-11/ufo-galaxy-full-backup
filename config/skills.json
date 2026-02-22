@@ -1,0 +1,62 @@
+{
+  "version": "1.0.0",
+  "description": "技能配置 - 支持动态加载技能包",
+  "builtin_skills": [
+    {
+      "id": "web_search",
+      "name": "网页搜索",
+      "description": "搜索网页内容",
+      "type": "action",
+      "tags": ["search", "web"],
+      "priority": 8
+    },
+    {
+      "id": "file_read",
+      "name": "读取文件",
+      "description": "读取文件内容",
+      "type": "action",
+      "tags": ["file", "io"],
+      "priority": 7
+    },
+    {
+      "id": "code_execute",
+      "name": "执行代码",
+      "description": "执行 Python 代码",
+      "type": "action",
+      "tags": ["code", "execute"],
+      "priority": 6
+    },
+    {
+      "id": "device_control",
+      "name": "设备控制",
+      "description": "控制设备执行操作",
+      "type": "action",
+      "tags": ["device", "control"],
+      "priority": 9
+    },
+    {
+      "id": "send_email",
+      "name": "发送邮件",
+      "description": "发送电子邮件",
+      "type": "action",
+      "tags": ["email", "communication"],
+      "priority": 7
+    },
+    {
+      "id": "translate",
+      "name": "翻译",
+      "description": "翻译文本",
+      "type": "action",
+      "tags": ["translate", "language"],
+      "priority": 6
+    }
+  ],
+  "skill_packages": [
+    {
+      "name": "ufo-galaxy-skills",
+      "source": "https://github.com/DannyFish-11/ufo-galaxy-skills",
+      "description": "UFO Galaxy 官方技能包",
+      "auto_load": false
+    }
+  ]
+}

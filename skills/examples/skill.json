@@ -1,0 +1,19 @@
+{
+  "id": "example_hello",
+  "name": "示例问候",
+  "description": "一个简单的示例技能",
+  "version": "1.0.0",
+  "author": "UFO Galaxy Team",
+  "type": "action",
+  "tags": ["example", "demo"],
+  "parameters": [
+    {
+      "name": "name",
+      "type": "string",
+      "description": "要问候的名字",
+      "required": true
+    }
+  ],
+  "handler_file": "handler.py",
+  "handler_function": "execute"
+}

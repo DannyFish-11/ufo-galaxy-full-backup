@@ -1300,6 +1300,43 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                     pass
             
             # ================================================================
+            
+            # ================================================================
+            # Step 2.5: 能力发现和执行
+            # ================================================================
+            
+            # 尝试发现最佳能力
+            try:
+                from core.capability_orchestrator import capability_orchestrator
+                
+                # 初始化能力编排器
+                await capability_orchestrator.initialize()
+                
+                # 发现能力
+                capabilities = await capability_orchestrator.discover(req.message, limit=3)
+                
+                if capabilities:
+                    best_cap = capabilities[0]
+                    cap_type = best_cap.get("type", "")
+                    
+                    # 如果找到高优先级的能力，执行它
+                    if cap_type in ["mcp_tool", "skill"] and best_cap.get("priority", 0) >= 7:
+                        logger.info(f"执行能力: {best_cap['id']}")
+                        result = await capability_orchestrator.execute(
+                            best_cap["id"],
+                            **(parsed_intent.params if parsed_intent else {}),
+                        )
+                        
+                        return JSONResponse({
+                            "success": True,
+                            "reply": f"已执行: {best_cap['name']}",
+                            "intent": intent,
+                            "capability": best_cap,
+                            "result": result,
+                        })
+            except Exception as e:
+                logger.warning(f"能力发现失败: {e}")
+            
             # Step 3: 普通对话 - 调用 LLM
             # ================================================================
             api_key = os.environ.get("OPENAI_API_KEY", "")
