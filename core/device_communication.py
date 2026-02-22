@@ -399,7 +399,59 @@ class DeviceCommunication:
             return None
         
         try:
-            message = DeviceMessage.from_json(message_data)
+            # 先尝试解析为 JSON
+            import json
+            raw_msg = json.loads(message_data)
+            
+            # 兼容安卓端握手消息
+            if raw_msg.get("type") == "handshake":
+                logger.info(f"收到安卓端握手: {device_id}")
+                
+                # 自动注册设备
+                try:
+                    from core.device_registry import device_registry
+                    device = device_registry.get(device_id)
+                    if not device:
+                        await device_registry.register(
+                            device_id=device_id,
+                            device_type=raw_msg.get("platform", "android"),
+                            name=f"Android Device ({device_id[:8]})",
+                            capabilities=["screen", "touch", "keyboard"],
+                            metadata={
+                                "version": raw_msg.get("version", "2.0"),
+                                "auto_registered": True,
+                            },
+                        )
+                except Exception as e:
+                    logger.warning(f"自动注册设备失败: {e}")
+                
+                # 返回握手确认
+                return DeviceMessage(
+                    type=MessageType.ACK,
+                    action="handshake",
+                    payload={"status": "connected", "device_id": device_id},
+                )
+            
+            # 兼容安卓端心跳消息
+            if raw_msg.get("type") == "heartbeat":
+                conn.last_heartbeat = time.time()
+                return DeviceMessage(
+                    type=MessageType.ACK,
+                    action="heartbeat",
+                )
+            
+            # 兼容安卓端 AIP 消息格式
+            if "type" in raw_msg and "payload" in raw_msg:
+                # AIP 格式，转换为 DeviceMessage
+                message = DeviceMessage(
+                    type=MessageType.COMMAND if raw_msg.get("type") in ["TEXT", "COMMAND"] else MessageType.EVENT,
+                    action=raw_msg.get("type", "").lower(),
+                    payload=raw_msg.get("payload", {}),
+                    device_id=device_id,
+                )
+            else:
+                # 标准 DeviceMessage 格式
+                message = DeviceMessage.from_json(message_data)
             conn.messages_received += 1
             conn.last_message = time.time()
             

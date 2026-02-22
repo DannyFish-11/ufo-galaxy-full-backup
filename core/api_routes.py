@@ -1821,8 +1821,25 @@ def create_websocket_routes(app: FastAPI, service_manager=None):
     
     @app.websocket("/ws/device/{device_id}")
     async def device_websocket(websocket: WebSocket, device_id: str):
-        """设备 WebSocket 连接 - 双向通信"""
+        """设备 WebSocket 连接 - 双向通信，兼容安卓端"""
         await connection_manager.connect_device(websocket, device_id)
+        
+        # 兼容安卓端：自动注册设备
+        try:
+            from core.device_registry import device_registry
+            device = device_registry.get(device_id)
+            if not device:
+                # 自动注册设备
+                await device_registry.register(
+                    device_id=device_id,
+                    device_type="android",
+                    name=f"Android Device ({device_id[:8]})",
+                    capabilities=["screen", "touch", "keyboard"],
+                    tags=["android", "auto-registered"],
+                )
+                logger.info(f"自动注册设备: {device_id}")
+        except Exception as e:
+            logger.warning(f"自动注册设备失败: {device_id} - {e}")
         
         # 更新设备在线状态
         if device_id in registered_devices:
