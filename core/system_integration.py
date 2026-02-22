@@ -245,8 +245,9 @@ class SystemIntegration:
     async def _load_agent_capabilities(self):
         """加载 Agent 能力"""
         try:
-            from core.agent_factory import agent_factory
+            from core.agent_factory import get_agent_factory_instance
             
+            agent_factory = get_agent_factory_instance()
             for agent_id, agent in agent_factory.agents.items():
                 for cap in agent.config.capabilities:
                     self.register_capability(
@@ -558,7 +559,7 @@ class SystemIntegration:
     async def _execute_agent(self, cap: Capability, params: Dict) -> Any:
         """执行 Agent 能力"""
         try:
-            from core.agent_factory import agent_factory
+            from core.agent_factory import get_agent_factory_instance
             
             agent_id = cap.source
             # Agent 执行逻辑

@@ -762,6 +762,124 @@ def create_api_routes(service_manager=None, config=None) -> APIRouter:
                 "error": str(e),
             }, status_code=500)
 
+
+    # ========================================================================
+    # /api/v1/mcp - MCP 管理 API
+    # ========================================================================
+    
+    @router.get("/api/v1/mcp/servers")
+    async def list_mcp_servers():
+        """列出已加载的 MCP 服务器"""
+        try:
+            from core.mcp_loader import mcp_loader
+            
+            servers = mcp_loader.list_servers()
+            return JSONResponse({
+                "success": True,
+                "servers": servers,
+                "total": len(servers),
+            })
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": str(e),
+            }, status_code=500)
+    
+    @router.post("/api/v1/mcp/load")
+    async def load_mcp_server(request: dict):
+        """加载 MCP 服务器"""
+        try:
+            from core.mcp_loader import mcp_loader
+            
+            name = request.get("name", "")
+            command = request.get("command", "")
+            args = request.get("args", [])
+            env = request.get("env", {})
+            
+            if not name or not command:
+                return JSONResponse({
+                    "success": False,
+                    "error": "缺少 name 或 command",
+                }, status_code=400)
+            
+            result = await mcp_loader.load(name, command, args, env)
+            
+            return JSONResponse({
+                "success": result.get("success", False),
+                "server_id": name,
+                "message": result.get("message", ""),
+            })
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": str(e),
+            }, status_code=500)
+    
+    @router.post("/api/v1/mcp/unload")
+    async def unload_mcp_server(server_id: str):
+        """卸载 MCP 服务器"""
+        try:
+            from core.mcp_loader import mcp_loader
+            
+            result = await mcp_loader.unload(server_id)
+            
+            return JSONResponse({
+                "success": result,
+                "server_id": server_id,
+            })
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": str(e),
+            }, status_code=500)
+    
+    @router.get("/api/v1/mcp/servers/{server_id}/tools")
+    async def list_mcp_tools(server_id: str):
+        """列出 MCP 服务器的工具"""
+        try:
+            from core.mcp_loader import mcp_loader
+            
+            tools = await mcp_loader.list_tools(server_id)
+            
+            return JSONResponse({
+                "success": True,
+                "server_id": server_id,
+                "tools": tools,
+            })
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": str(e),
+            }, status_code=500)
+    
+    @router.post("/api/v1/mcp/call")
+    async def call_mcp_tool(request: dict):
+        """调用 MCP 工具"""
+        try:
+            from core.mcp_loader import mcp_loader
+            
+            server_id = request.get("server_id", "")
+            tool_name = request.get("tool_name", "")
+            arguments = request.get("arguments", {})
+            
+            if not server_id or not tool_name:
+                return JSONResponse({
+                    "success": False,
+                    "error": "缺少 server_id 或 tool_name",
+                }, status_code=400)
+            
+            result = await mcp_loader.call_tool(server_id, tool_name, arguments)
+            
+            return JSONResponse({
+                "success": True,
+                "result": result,
+            })
+        except Exception as e:
+            return JSONResponse({
+                "success": False,
+                "error": str(e),
+            }, status_code=500)
+
     # ========================================================================
     # /api/v1/nodes - 节点查询和调用
     # ========================================================================
